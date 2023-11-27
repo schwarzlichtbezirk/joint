@@ -69,43 +69,38 @@ func (jc *JointCache) Open(fpath string) (f fs.File, err error) {
 	if fpath == "." {
 		fpath = ""
 	}
-	return jw.Open(fpath)
+	if _, err = jw.Open(fpath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			jc.Put(jw) // reuse joint
+		} else {
+			jw.Cleanup() // drop the joint
+		}
+		return
+	}
+	f = jw // put joint back to cache after Close
+	return
 }
 
 // Stat implements fs.StatFS interface.
 func (jc *JointCache) Stat(fpath string) (fi fs.FileInfo, err error) {
-	var jw JointWrap
-	if jw, err = jc.Get(); err != nil {
+	var f fs.File
+	if f, err = jc.Open(fpath); err != nil {
 		return
 	}
+	defer f.Close()
 
-	if fpath == "." {
-		fpath = ""
-	}
-	if _, err = jw.Open(fpath); err != nil {
-		return
-	}
-	defer jw.Close()
-
-	return jw.Stat()
+	return f.Stat()
 }
 
 // ReadDir implements fs.ReadDirFS interface.
 func (jc *JointCache) ReadDir(fpath string) (des []fs.DirEntry, err error) {
-	var jw JointWrap
-	if jw, err = jc.Get(); err != nil {
+	var f fs.File
+	if f, err = jc.Open(fpath); err != nil {
 		return
 	}
+	defer f.Close()
 
-	if fpath == "." {
-		fpath = ""
-	}
-	if _, err = jw.Open(fpath); err != nil {
-		return
-	}
-	defer jw.Close()
-
-	return jw.ReadDir(-1)
+	return f.(Joint).ReadDir(-1)
 }
 
 // Count is number of free joints in cache for one key path.

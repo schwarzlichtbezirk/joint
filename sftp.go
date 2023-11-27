@@ -92,9 +92,11 @@ func (j *SftpJoint) Open(fpath string) (file fs.File, err error) {
 }
 
 func (j *SftpJoint) Close() (err error) {
-	err = j.File.Close()
 	j.path = ""
-	j.File = nil
+	if j.File != nil {
+		err = j.File.Close()
+		j.File = nil
+	}
 	return
 }
 

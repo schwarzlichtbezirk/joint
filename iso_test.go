@@ -124,6 +124,42 @@ func checkDir(j jnt.Joint, fpath string) (err error) {
 	return nil
 }
 
+// Open file "fox.txt" with content "The quick brown fox
+// jumps over the lazy dog." and read chunks from it.
+func TestReadChunk(t *testing.T) {
+	var err error
+
+	var j jnt.Joint = &jnt.IsoJoint{}
+	if err = j.Make(jnt.JoinFast(testpath, "external.iso")); err != nil {
+		t.Fatal(err)
+	}
+	defer j.Cleanup()
+
+	if _, err = j.Open("fox.txt"); err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+
+	var b1 [9]byte // buffer for "brown fox" chunk from file content
+	if _, err = j.ReadAt(b1[:], 10); err != nil {
+		t.Fatal(err)
+	}
+	if string(b1[:]) != "brown fox" {
+		t.Fatal("read string does not match to pattern")
+	}
+
+	var b2 [8]byte // buffer for "lazy dog" chunk from file content
+	if _, err = j.Seek(35, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = j.Read(b2[:]); err != nil {
+		t.Fatal(err)
+	}
+	if string(b2[:]) != "lazy dog" {
+		t.Fatal("read string does not match to pattern")
+	}
+}
+
 // Check file reading in external ISO-disk.
 func TestExtReadFile(t *testing.T) {
 	var err error

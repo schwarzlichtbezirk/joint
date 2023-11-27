@@ -1,6 +1,10 @@
 # Joint
 
-Provides a single interface to get access to files in ISO-9660 images, FTP-servers, SFTP-servers, WebDAV-servers. Contains cache with reusable connections to endpoints.
+Provides single interface to get access to files in ISO-9660 images, FTP-servers, SFTP-servers, WebDAV-servers. Contains cache with reusable connections to endpoints.
+
+## Goals
+
+You can read the contents of a folder on an FTP-server either sequentially through one connection, but then this will take a lot of time, or by opening multiple connections, in which case too many connections will be opened for multiple requests. This library uses joints, which hold the connection to the FTP-server after reading a file, or some kind of access, after closing the file, they are placed into the cache, and can be reused later. If the connection has not been used for a certain time, it is reset.
 
 ## Examples
 
@@ -85,3 +89,56 @@ func main() {
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
+
+### Files reading
+
+```go
+package main
+
+import (
+    "fmt"
+    "io"
+    "io/fs"
+    "log"
+
+    jnt "github.com/schwarzlichtbezirk/joint"
+)
+
+func main() {
+    var err error
+    var b []byte
+
+    // Create joint to ISO-9660 image.
+    var j jnt.Joint = &jnt.IsoJoint{}
+    if err = j.Make("testdata/external.iso"); err != nil {
+        log.Fatal(err)
+    }
+    defer j.Cleanup() // Cleanup drops joint's link
+
+    // Working with file object returned by Open-function.
+    // Close-call on this file will never put joint to cache in any case.
+    var f fs.File
+    if f, err = j.Open("fox.txt"); err != nil {
+        log.Fatal(err)
+    }
+    if b, err = io.ReadAll(f); err != nil { // read from file
+        log.Fatal(err)
+    }
+    f.Close()
+    fmt.Println(string(b))
+
+    // Working with joint explicitly. If joint is received from cache,
+    // Close-call will return joint back to cache.
+    if _, err = j.Open("data/lorem1.txt"); err != nil {
+        log.Fatal(err)
+    }
+    if b, err = io.ReadAll(j); err != nil { // read from joint
+        log.Fatal(err)
+    }
+    j.Close()
+    fmt.Println(string(b))
+}
+```
+
+---
+(c) schwarzlichtbezirk, 2023.

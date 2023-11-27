@@ -41,8 +41,10 @@ func (j *SysJoint) Open(fpath string) (file fs.File, err error) {
 }
 
 func (j *SysJoint) Close() (err error) {
-	err = j.File.Close()
-	j.File = nil
+	if j.File != nil {
+		err = j.File.Close()
+		j.File = nil
+	}
 	return
 }
 
