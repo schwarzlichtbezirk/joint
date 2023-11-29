@@ -9,36 +9,26 @@ import (
 	"strings"
 )
 
-// RFile combines fs.File interface and io.Seeker interface.
-type RFile interface {
-	io.Reader
-	io.ReaderAt
-	io.Seeker
-	fs.File
-}
-
 // OpenFile opens file from file system, or looking for iso-disk in the given path,
 // opens it, and opens nested into iso-disk file. Or opens file at cloud.
 func OpenFile(anypath string) (j Joint, err error) {
 	if strings.HasPrefix(anypath, "ftp://") {
 		var addr, fpath = SplitUrl(anypath)
 		var jc = GetJointCache(addr, NewFtpJoint)
-		if j, err = jc.Get(); err != nil {
+		var f fs.File
+		if f, err = jc.Open(fpath); err != nil {
 			return
 		}
-		if _, err = j.Open(fpath); err != nil {
-			return
-		}
+		j = f.(Joint)
 		return
 	} else if strings.HasPrefix(anypath, "sftp://") {
 		var addr, fpath = SplitUrl(anypath)
 		var jc = GetJointCache(addr, NewSftpJoint)
-		if j, err = jc.Get(); err != nil {
+		var f fs.File
+		if f, err = jc.Open(fpath); err != nil {
 			return
 		}
-		if _, err = j.Open(fpath); err != nil {
-			return
-		}
+		j = f.(Joint)
 		return
 	} else if strings.HasPrefix(anypath, "http://") || strings.HasPrefix(anypath, "https://") {
 		var addr, fpath, ok = GetDavPath(anypath)
@@ -47,31 +37,30 @@ func OpenFile(anypath string) (j Joint, err error) {
 			return
 		}
 		var jc = GetJointCache(addr, NewDavJoint)
-		if j, err = jc.Get(); err != nil {
+		var f fs.File
+		if f, err = jc.Open(fpath); err != nil {
 			return
 		}
-		if _, err = j.Open(fpath); err != nil {
-			return
-		}
+		j = f.(Joint)
 		return
 	} else {
-		var f *os.File
-		if f, err = os.Open(anypath); err == nil { // primary filesystem file
-			j = &SysJoint{"", f}
+		var fsys *os.File
+		if fsys, err = os.Open(anypath); err == nil { // primary filesystem file
+			j = &SysJoint{"", fsys}
 			return
 		}
-		var file io.Closer = io.NopCloser(nil) // empty closer stub
+		var fc io.Closer = io.NopCloser(nil) // empty closer stub
 
 		// looking for nested file
 		var isopath = anypath
 		for errors.Is(err, fs.ErrNotExist) && isopath != "." && isopath != "/" {
 			isopath = path.Dir(isopath)
-			file, err = os.Open(isopath)
+			fc, err = os.Open(isopath)
 		}
 		if err != nil {
 			return
 		}
-		file.Close()
+		fc.Close()
 
 		var fpath string
 		if isopath == anypath {
@@ -81,12 +70,11 @@ func OpenFile(anypath string) (j Joint, err error) {
 		}
 
 		var jc = GetJointCache(isopath, NewIsoJoint)
-		if j, err = jc.Get(); err != nil {
+		var f fs.File
+		if f, err = jc.Open(fpath); err != nil {
 			return
 		}
-		if _, err = j.Open(fpath); err != nil {
-			return
-		}
+		j = f.(Joint)
 		return
 	}
 }
@@ -98,13 +86,7 @@ func StatFile(anypath string) (fi fs.FileInfo, err error) {
 	if j, err = OpenFile(anypath); err != nil {
 		return
 	}
-	defer func() {
-		if err != nil {
-			j.Cleanup()
-		} else {
-			j.Close()
-		}
-	}()
+	defer j.Close()
 	return j.Stat()
 }
 
@@ -116,13 +98,7 @@ func ReadDir(anypath string) (ret []fs.DirEntry, err error) {
 	if j, err = OpenFile(anypath); err != nil {
 		return
 	}
-	defer func() {
-		if err != nil {
-			j.Cleanup()
-		} else {
-			j.Close()
-		}
-	}()
+	defer j.Close()
 	return j.ReadDir(-1)
 }
 

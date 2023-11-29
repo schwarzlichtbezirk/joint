@@ -159,9 +159,9 @@ func (j *FtpJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	return
 }
 
-func (j *FtpJoint) Info(fpath string) (fi fs.FileInfo, err error) {
+func (j *FtpJoint) Stat() (fi fs.FileInfo, err error) {
 	var ent *ftp.Entry
-	if ent, err = j.conn.GetEntry(JoinFast(j.pwd, fpath)); err != nil {
+	if ent, err = j.conn.GetEntry(JoinFast(j.pwd, j.path)); err != nil {
 		return
 	}
 	fi = FtpFileInfo{
@@ -170,9 +170,9 @@ func (j *FtpJoint) Info(fpath string) (fi fs.FileInfo, err error) {
 	return
 }
 
-func (j *FtpJoint) Stat() (fi fs.FileInfo, err error) {
+func (j *FtpJoint) Info(fpath string) (fi fs.FileInfo, err error) {
 	var ent *ftp.Entry
-	if ent, err = j.conn.GetEntry(JoinFast(j.pwd, j.path)); err != nil {
+	if ent, err = j.conn.GetEntry(JoinFast(j.pwd, fpath)); err != nil {
 		return
 	}
 	fi = FtpFileInfo{

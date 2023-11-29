@@ -8,6 +8,14 @@ import (
 	"time"
 )
 
+// RFile combines fs.File interface and io.Seeker interface.
+type RFile interface {
+	io.Reader
+	io.ReaderAt
+	io.Seeker
+	fs.File
+}
+
 // Joint describes interface with joint to some file system provider.
 type Joint interface {
 	Make(string) error // establish connection to file system provider
@@ -30,6 +38,24 @@ func (jw JointWrap) Close() error {
 		jw.jc.Put(jw)
 	}
 	return err
+}
+
+// Eject joint from the cache.
+func (jw JointWrap) Eject() bool {
+	if jw.jc == nil {
+		return false
+	}
+	jw.jc.mux.Lock()
+	defer jw.jc.mux.Unlock()
+	for i, jf := range jw.jc.cache {
+		if jf.Joint == jw.Joint {
+			jw.jc.expire[i].Stop()
+			jw.jc.expire = append(jw.jc.expire[:i], jw.jc.expire[i+1:]...)
+			jw.jc.cache = append(jw.jc.cache[:i], jw.jc.cache[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 type Config struct {
@@ -128,6 +154,21 @@ func (jc *JointCache) Close() (err error) {
 	return errors.Join(errs...)
 }
 
+// Checks whether it is contained joint in cache.
+func (jc *JointCache) Has(j Joint) bool {
+	if jw, ok := j.(JointWrap); ok {
+		j = jw.Joint
+	}
+	jc.mux.Lock()
+	defer jc.mux.Unlock()
+	for _, jw := range jc.cache {
+		if jw.Joint == j {
+			return true
+		}
+	}
+	return false
+}
+
 // Pop retrieves cached disk joint, and returns ok if it has.
 func (jc *JointCache) Pop() (jw JointWrap, ok bool) {
 	jc.mux.Lock()
@@ -135,9 +176,11 @@ func (jc *JointCache) Pop() (jw JointWrap, ok bool) {
 	var l = len(jc.cache)
 	if l > 0 {
 		jc.expire[0].Stop()
-		jc.expire = jc.expire[1:]
+		copy(jc.expire, jc.expire[1:])
+		jc.expire = jc.expire[:l-1]
 		jw = jc.cache[0]
-		jc.cache = jc.cache[1:]
+		copy(jc.cache, jc.cache[1:])
+		jc.cache = jc.cache[:l-1]
 		ok = true
 	}
 	return

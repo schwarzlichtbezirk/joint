@@ -98,8 +98,15 @@ func TestCacheGetPut(t *testing.T) {
 	if j1 != j2 {
 		t.Fatal("joint must be reused, got new object", 0, jc.Count())
 	}
+	// force to put and eject joint
 	jc.Put(jw)
-	if jc.Count() != 1 {
-		t.Fatalf("expected %d joints in cache, got %d", 1, jc.Count())
+	if !jc.Has(jw) {
+		t.Fatalf("joint does not found in the cache")
+	}
+	if !jw.Eject() {
+		t.Fatal("can not eject joint from cache")
+	}
+	if jc.Has(jw) {
+		t.Fatalf("joint does not ejected")
 	}
 }

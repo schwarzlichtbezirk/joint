@@ -125,6 +125,10 @@ func (j *IsoJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	return
 }
 
+func (j *IsoJoint) Stat() (fs.FileInfo, error) {
+	return IsoFileInfo{j.File}, nil
+}
+
 func (j *IsoJoint) Info(fpath string) (fi fs.FileInfo, err error) {
 	var file *iso.File
 	if file, err = j.OpenFile(fpath); err != nil {
@@ -134,10 +138,6 @@ func (j *IsoJoint) Info(fpath string) (fi fs.FileInfo, err error) {
 		File: file,
 	}
 	return
-}
-
-func (j *IsoJoint) Stat() (fs.FileInfo, error) {
-	return IsoFileInfo{j.File}, nil
 }
 
 type IsoFileInfo struct {

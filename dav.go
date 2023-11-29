@@ -111,10 +111,6 @@ func (j *DavJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	return
 }
 
-func (j *DavJoint) Info(fpath string) (fi fs.FileInfo, err error) {
-	return j.client.Stat(fpath)
-}
-
 func (j *DavJoint) Read(b []byte) (n int, err error) {
 	if j.ReadCloser == nil {
 		if j.ReadCloser, err = j.client.ReadStreamRange(j.path, j.pos, 0); err != nil {
@@ -173,6 +169,10 @@ func (j *DavJoint) ReadAt(b []byte, off int64) (n int, err error) {
 func (j *DavJoint) Stat() (fi fs.FileInfo, err error) {
 	fi, err = j.client.Stat(j.path)
 	return
+}
+
+func (j *DavJoint) Info(fpath string) (fi fs.FileInfo, err error) {
+	return j.client.Stat(fpath)
 }
 
 // The End.
