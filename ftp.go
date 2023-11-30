@@ -96,7 +96,7 @@ func NewFtpJoint() Joint {
 	return &FtpJoint{}
 }
 
-func (j *FtpJoint) Make(urladdr string) (err error) {
+func (j *FtpJoint) Make(base Joint, urladdr string) (err error) {
 	var u *url.URL
 	if u, err = url.Parse(urladdr); err != nil {
 		return

@@ -11,7 +11,10 @@ import (
 	jnt "github.com/schwarzlichtbezirk/joint"
 )
 
-const testpath = "testdata"
+const (
+	extpath = "testdata/external.iso"
+	intpath = "disk/internal.iso"
+)
 
 // precalculated CRC32 codes with IEEE polynomial of files in ISO-images.
 var filecrc = map[string]uint32{
@@ -25,15 +28,6 @@ var filecrc = map[string]uint32{
 	"док1.txt":     0x3d4fdf17, // cyrillic name
 	"док2.txt":     0x42d2236a, // cyrillic name
 	"internal.iso": 0xf4c1b74d,
-}
-
-var dirext = map[string][]string{
-	"":           {"fox.txt", "data", "disk"},
-	"data":       {"lorem1.txt", "lorem2.txt", "lorem3.txt", "рыба.txt", "docs", "доки", "empty"},
-	"disk":       {"internal.iso"},
-	"data/docs":  {"doc1.txt", "doc2.txt"},
-	"data/доки":  {"док1.txt", "док2.txt"},
-	"data/empty": {},
 }
 
 func checkFile(j jnt.Joint, fpath string) (err error) {
@@ -74,7 +68,7 @@ func checkFile(j jnt.Joint, fpath string) (err error) {
 	return nil
 }
 
-func checkDir(j jnt.Joint, fpath string) (err error) {
+func checkDir(j jnt.Joint, fpath string, dirs map[string][]string) (err error) {
 	if j.Busy() {
 		return fmt.Errorf("joint '%s' is busy before opening", fpath)
 	}
@@ -101,7 +95,7 @@ func checkDir(j jnt.Joint, fpath string) (err error) {
 		return err
 	}
 
-	var list, ok = dirext[fpath]
+	var list, ok = dirs[fpath]
 	if !ok {
 		return fmt.Errorf("directory with path '%s' is not found", fpath)
 	}
@@ -130,7 +124,7 @@ func TestReadChunk(t *testing.T) {
 	var err error
 
 	var j jnt.Joint = &jnt.IsoJoint{}
-	if err = j.Make(jnt.JoinFast(testpath, "external.iso")); err != nil {
+	if err = j.Make(nil, extpath); err != nil {
 		t.Fatal(err)
 	}
 	defer j.Cleanup()
@@ -165,7 +159,7 @@ func TestExtReadFile(t *testing.T) {
 	var err error
 
 	var j jnt.Joint = &jnt.IsoJoint{}
-	if err = j.Make(jnt.JoinFast(testpath, "external.iso")); err != nil {
+	if err = j.Make(nil, extpath); err != nil {
 		t.Fatal(err)
 	}
 	defer j.Cleanup()
@@ -189,18 +183,84 @@ func TestExtReadFile(t *testing.T) {
 	}
 }
 
+// Check file reading in internal ISO-disk.
+func TestIntReadFile(t *testing.T) {
+	var err error
+
+	var j1 jnt.Joint = &jnt.IsoJoint{}
+	if err = j1.Make(nil, extpath); err != nil {
+		t.Fatal(err)
+	}
+	defer j1.Cleanup()
+
+	var j2 jnt.Joint = &jnt.IsoJoint{}
+	if err = j2.Make(j1, intpath); err != nil {
+		t.Fatal(err)
+	}
+	defer j2.Cleanup()
+
+	var files = []string{
+		"fox.txt",
+		"docs/doc1.txt",
+		"docs/doc2.txt",
+		"доки/док1.txt",
+		"доки/док2.txt",
+	}
+	for _, fpath := range files {
+		if err = checkFile(j2, fpath); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // Check directory list in external ISO-disk.
 func TestExtDirList(t *testing.T) {
 	var err error
 
 	var j jnt.Joint = &jnt.IsoJoint{}
-	if err = j.Make(jnt.JoinFast(testpath, "external.iso")); err != nil {
+	if err = j.Make(nil, extpath); err != nil {
 		t.Fatal(err)
 	}
 	defer j.Cleanup()
 
-	for fpath := range dirext {
-		if err = checkDir(j, fpath); err != nil {
+	var dirs = map[string][]string{
+		"":           {"fox.txt", "data", "disk"},
+		"data":       {"lorem1.txt", "lorem2.txt", "lorem3.txt", "рыба.txt", "docs", "доки", "empty"},
+		"disk":       {"internal.iso"},
+		"data/docs":  {"doc1.txt", "doc2.txt"},
+		"data/доки":  {"док1.txt", "док2.txt"},
+		"data/empty": {},
+	}
+	for fpath := range dirs {
+		if err = checkDir(j, fpath, dirs); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Check directory list in internal ISO-disk.
+func TestIntDirList(t *testing.T) {
+	var err error
+
+	var j1 jnt.Joint = &jnt.IsoJoint{}
+	if err = j1.Make(nil, extpath); err != nil {
+		t.Fatal(err)
+	}
+	defer j1.Cleanup()
+
+	var j2 jnt.Joint = &jnt.IsoJoint{}
+	if err = j2.Make(j1, intpath); err != nil {
+		t.Fatal(err)
+	}
+	defer j2.Cleanup()
+
+	var dirs = map[string][]string{
+		"":     {"fox.txt", "docs", "доки"},
+		"docs": {"doc1.txt", "doc2.txt"},
+		"доки": {"док1.txt", "док2.txt"},
+	}
+	for fpath := range dirs {
+		if err = checkDir(j2, fpath, dirs); err != nil {
 			t.Fatal(err)
 		}
 	}

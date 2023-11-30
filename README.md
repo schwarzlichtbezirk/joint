@@ -113,7 +113,7 @@ func main() {
 
     // Create joint to ISO-9660 image.
     var j jnt.Joint = &jnt.IsoJoint{}
-    if err = j.Make("testdata/external.iso"); err != nil {
+    if err = j.Make(nil, "testdata/external.iso"); err != nil {
         log.Fatal(err)
     }
     defer j.Cleanup() // Cleanup drops joint's link
@@ -140,6 +140,48 @@ func main() {
         log.Fatal(err)
     }
     j.Close()
+}
+```
+
+### Open nested ISO-image
+
+```go
+package main
+
+import (
+    "io"
+    "io/fs"
+    "log"
+    "os"
+
+    jnt "github.com/schwarzlichtbezirk/joint"
+)
+
+func main() {
+    var err error
+
+    // Create joint to external ISO-image.
+    var j1 jnt.Joint = &jnt.IsoJoint{}
+    if err = j1.Make(nil, "testdata/external.iso"); err != nil {
+        log.Fatal(err)
+    }
+    defer j1.Cleanup()
+
+    // Create joint to internal ISO-image placed inside of first.
+    var j2 jnt.Joint = &jnt.IsoJoint{}
+    if err = j2.Make(j1, "disk/internal.iso"); err != nil {
+        log.Fatal(err)
+    }
+    defer j2.Cleanup()
+
+    // Open file at internal ISO-image.
+    var f fs.File
+    if f, err = j.Open("fox.txt"); err != nil {
+        log.Fatal(err)
+    }
+    defer f.Close()
+
+    io.Copy(os.Stdout, f)
 }
 ```
 

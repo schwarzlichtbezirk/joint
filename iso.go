@@ -3,7 +3,6 @@ package joint
 import (
 	"io"
 	"io/fs"
-	"os"
 	"strings"
 
 	iso "github.com/kdomanski/iso9660"
@@ -14,7 +13,7 @@ import (
 // to access to nested files.
 // Key is external path, to ISO9660-file disk image at local filesystem.
 type IsoJoint struct {
-	file  RFile
+	file  Joint
 	img   *iso.Image
 	cache map[string]*iso.File
 
@@ -26,10 +25,15 @@ func NewIsoJoint() Joint {
 	return &IsoJoint{}
 }
 
-func (j *IsoJoint) Make(isopath string) (err error) {
-	if j.file, err = os.Open(isopath); err != nil {
+func (j *IsoJoint) Make(base Joint, isopath string) (err error) {
+	if base == nil {
+		base = &SysJoint{}
+	}
+	var f fs.File
+	if f, err = base.Open(isopath); err != nil {
 		return
 	}
+	j.file = f.(Joint)
 	if j.img, err = iso.OpenImage(j.file); err != nil {
 		return
 	}

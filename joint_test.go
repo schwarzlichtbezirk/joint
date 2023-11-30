@@ -11,7 +11,7 @@ func TestWrapper(t *testing.T) {
 	var err error
 	var jw jnt.JointWrap
 
-	var jc = jnt.NewJointCache(jnt.JoinFast(testpath, "external.iso"), jnt.NewIsoJoint)
+	var jc = jnt.NewJointCache(extpath, jnt.NewIsoJoint)
 	defer jc.Close()
 
 	// create joint
@@ -67,7 +67,7 @@ func TestCacheGetPut(t *testing.T) {
 	var j1, j2 any
 	var jw jnt.JointWrap
 
-	var jc = jnt.NewJointCache(jnt.JoinFast(testpath, "external.iso"), jnt.NewIsoJoint)
+	var jc = jnt.NewJointCache(extpath, jnt.NewIsoJoint)
 	defer jc.Close()
 
 	// create joint

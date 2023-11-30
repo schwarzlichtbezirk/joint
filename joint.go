@@ -18,12 +18,12 @@ type RFile interface {
 
 // Joint describes interface with joint to some file system provider.
 type Joint interface {
-	Make(string) error // establish connection to file system provider
-	Cleanup() error    // close connection to file system provider
-	Busy() bool        // file is opened
-	fs.FS              // open file with local file path
-	io.Closer          // close local file
-	fs.ReadDirFile     // read directory pointed by local file path
+	Make(Joint, string) error // establish connection to file system provider
+	Cleanup() error           // close connection to file system provider
+	Busy() bool               // file is opened
+	fs.FS                     // open file with local file path
+	io.Closer                 // close local file
+	fs.ReadDirFile            // read directory pointed by local file path
 	RFile
 }
 
@@ -191,7 +191,7 @@ func (jc *JointCache) Get() (jw JointWrap, err error) {
 	jw, ok := jc.Pop()
 	if !ok {
 		jw = JointWrap{jc, jc.master()}
-		if err = jw.Make(jc.key); err != nil {
+		if err = jw.Make(nil, jc.key); err != nil {
 			return
 		}
 	}

@@ -14,7 +14,7 @@ func NewSysJoint() Joint {
 	return &SysJoint{}
 }
 
-func (j *SysJoint) Make(dir string) (err error) {
+func (j *SysJoint) Make(base Joint, dir string) (err error) {
 	j.dir = dir
 	return
 }

@@ -61,7 +61,7 @@ func NewDavJoint() Joint {
 	return &DavJoint{}
 }
 
-func (j *DavJoint) Make(urladdr string) (err error) {
+func (j *DavJoint) Make(base Joint, urladdr string) (err error) {
 	j.client = gowebdav.NewClient(urladdr, "", "") // user & password gets from URL
 	err = j.client.Connect()
 	return
