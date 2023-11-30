@@ -3,6 +3,7 @@ package joint
 import (
 	"io"
 	"io/fs"
+	"os"
 	"strings"
 
 	iso "github.com/kdomanski/iso9660"
@@ -26,7 +27,7 @@ func NewIsoJoint() Joint {
 }
 
 func (j *IsoJoint) Make(isopath string) (err error) {
-	if j.file, err = OpenFile(isopath); err != nil {
+	if j.file, err = os.Open(isopath); err != nil {
 		return
 	}
 	if j.img, err = iso.OpenImage(j.file); err != nil {

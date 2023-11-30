@@ -260,4 +260,14 @@ func JointPoolKeys() []string {
 	return list
 }
 
+// ClearJointPool resets all caches.
+func ClearJointPool() {
+	jpmux.Lock()
+	defer jpmux.Unlock()
+	for _, jc := range jp {
+		jc.Close()
+	}
+	clear(jp)
+}
+
 // The End.

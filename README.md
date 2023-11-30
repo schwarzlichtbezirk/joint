@@ -2,6 +2,10 @@
 
 Provides single interface to get access to files in ISO-9660 images, FTP-servers, SFTP-servers, WebDAV-servers. Contains cache with reusable connections to endpoints.
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/schwarzlichtbezirk/joint.svg)](https://pkg.go.dev/github.com/schwarzlichtbezirk/joint)
+[![Go Report Card](https://goreportcard.com/badge/github.com/schwarzlichtbezirk/joint)](https://goreportcard.com/report/github.com/schwarzlichtbezirk/joint)
+[![Hits-of-Code](https://hitsofcode.com/github/schwarzlichtbezirk/joint?branch=main)](https://hitsofcode.com/github/schwarzlichtbezirk/joint/view?branch=main)
+
 ## Goals
 
 You can read the contents of a folder on an FTP-server either sequentially through one connection, but then this will take a lot of time, or by opening multiple connections, in which case too many connections will be opened for multiple requests. This library uses joints, which hold the connection to the FTP-server after reading a file, or some kind of access, after closing the file, they are placed into the cache, and can be reused later. If the connection has not been used for a certain time, it is reset.
@@ -106,7 +110,6 @@ import (
 
 func main() {
     var err error
-    var b []byte
 
     // Create joint to ISO-9660 image.
     var j jnt.Joint = &jnt.IsoJoint{}
@@ -121,22 +124,22 @@ func main() {
     if f, err = j.Open("fox.txt"); err != nil {
         log.Fatal(err)
     }
+    var b []byte
     if b, err = io.ReadAll(f); err != nil { // read from file
         log.Fatal(err)
     }
-    f.Close()
     fmt.Println(string(b))
+    f.Close()
 
     // Working with joint explicitly. If joint is received from cache,
     // Close-call will return joint back to cache.
     if _, err = j.Open("data/lorem1.txt"); err != nil {
         log.Fatal(err)
     }
-    if b, err = io.ReadAll(j); err != nil { // read from joint
+    if _, err = io.Copy(os.Stdout, j); err != nil { // read from joint
         log.Fatal(err)
     }
     j.Close()
-    fmt.Println(string(b))
 }
 ```
 
