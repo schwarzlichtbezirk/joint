@@ -1,6 +1,7 @@
 package joint_test
 
 import (
+	"io/fs"
 	"testing"
 
 	jnt "github.com/schwarzlichtbezirk/joint"
@@ -11,7 +12,7 @@ func TestWrapper(t *testing.T) {
 	var err error
 	var jw jnt.JointWrap
 
-	var jc = jnt.NewJointCache(extpath, jnt.NewIsoJoint)
+	var jc = jnt.NewJointCache(extpath)
 	defer jc.Close()
 
 	// create joint
@@ -67,7 +68,7 @@ func TestCacheGetPut(t *testing.T) {
 	var j1, j2 any
 	var jw jnt.JointWrap
 
-	var jc = jnt.NewJointCache(extpath, jnt.NewIsoJoint)
+	var jc = jnt.NewJointCache(extpath)
 	defer jc.Close()
 
 	// create joint
@@ -108,5 +109,40 @@ func TestCacheGetPut(t *testing.T) {
 	}
 	if jc.Has(jw) {
 		t.Fatalf("joint does not ejected")
+	}
+}
+
+func TestMakeJoint(t *testing.T) {
+	var j, err = jnt.MakeJoint("testdata/external.iso/disk/internal.iso")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Cleanup()
+
+	var f fs.File
+	if f, err = j.Open("fox.txt"); err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	var b [9]byte // buffer for "brown fox" chunk from file content
+	if _, err = j.ReadAt(b[:], 10); err != nil {
+		t.Fatal(err)
+	}
+	if string(b[:]) != "brown fox" {
+		t.Fatal("read string does not match to pattern")
+	}
+
+	// check up joints chain
+	var ok bool
+	var j0, j1 *jnt.IsoJoint
+	if j0, ok = j.(*jnt.IsoJoint); !ok {
+		t.Fatal("can not cast to ISO joint")
+	}
+	if j1, ok = j0.Base.(*jnt.IsoJoint); !ok {
+		t.Fatal("can not cast base to ISO joint")
+	}
+	if _, ok = j1.Base.(*jnt.SysJoint); !ok {
+		t.Fatal("can not cast primary joint to system joint")
 	}
 }

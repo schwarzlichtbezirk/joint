@@ -24,12 +24,10 @@ import (
     jnt "github.com/schwarzlichtbezirk/hms/joint"
 )
 
-const isopath = "testdata/external.iso"
-
 // Open http://localhost:8080/ in browser
 // to get a list of files in ISO-image.
 func main() {
-    var jc = jnt.NewJointCache(isopath, jnt.NewIsoJoint)
+    var jc = jnt.NewJointCache("testdata/external.iso")
     http.Handle("/", http.FileServer(http.FS(jc)))
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -47,12 +45,10 @@ import (
     jnt "github.com/schwarzlichtbezirk/hms/joint"
 )
 
-const davpath = "https://music:x@192.168.1.1/webdav/"
-
 // Open http://localhost:8080/ in browser
 // to get a list of files in WebDAV-server for given user.
 func main() {
-    var jc = jnt.NewJointCache(davpath, jnt.NewDavJoint)
+    var jc = jnt.NewJointCache("https://music:x@192.168.1.1/webdav/")
     http.Handle("/", http.FileServer(http.FS(jc)))
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -83,18 +79,18 @@ const (
 // http://localhost:8080/sftp/ - content of SFTP-server
 func main() {
     http.Handle("/iso/", http.StripPrefix("/iso/", http.FileServer(
-        http.FS(jnt.NewJointCache(isopath, jnt.NewIsoJoint)))))
+        http.FS(jnt.NewJointCache(isopath)))))
     http.Handle("/dav/", http.StripPrefix("/dav/", http.FileServer(
-        http.FS(jnt.NewJointCache(davpath, jnt.NewDavJoint)))))
+        http.FS(jnt.NewJointCache(davpath)))))
     http.Handle("/ftp/", http.StripPrefix("/ftp/", http.FileServer(
-        http.FS(jnt.NewJointCache(ftppath, jnt.NewFtpJoint)))))
+        http.FS(jnt.NewJointCache(ftppath)))))
     http.Handle("/sftp/", http.StripPrefix("/sftp/", http.FileServer(
-        http.FS(jnt.NewJointCache(sftppath, jnt.NewSftpJoint)))))
+        http.FS(jnt.NewJointCache(sftppath)))))
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
 
-### Files reading
+### Files reading by joints
 
 ```go
 package main
@@ -143,7 +139,7 @@ func main() {
 }
 ```
 
-### Open nested ISO-image
+### Open nested ISO-image by joints
 
 ```go
 package main

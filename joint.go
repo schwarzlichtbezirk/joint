@@ -73,16 +73,14 @@ var Cfg = Config{
 // JointCache implements cache with opened joints to some file system resource.
 type JointCache struct {
 	key    string
-	master func() Joint
 	cache  []JointWrap
 	expire []*time.Timer
 	mux    sync.Mutex
 }
 
-func NewJointCache(key string, master func() Joint) *JointCache {
+func NewJointCache(key string) *JointCache {
 	return &JointCache{
-		key:    key,
-		master: master,
+		key: key,
 	}
 }
 
@@ -190,10 +188,11 @@ func (jc *JointCache) Pop() (jw JointWrap, ok bool) {
 func (jc *JointCache) Get() (jw JointWrap, err error) {
 	jw, ok := jc.Pop()
 	if !ok {
-		jw = JointWrap{jc, jc.master()}
-		if err = jw.Make(nil, jc.key); err != nil {
+		var j Joint
+		if j, err = MakeJoint(jc.key); err != nil {
 			return
 		}
+		jw = JointWrap{jc, j}
 	}
 	return
 }
@@ -222,13 +221,13 @@ var jp = map[string]*JointCache{}
 var jpmux sync.RWMutex
 
 // GetJointCache returns cache from pool for given key path, or creates new one.
-func GetJointCache(key string, master func() Joint) (jc *JointCache) {
+func GetJointCache(key string) (jc *JointCache) {
 	jpmux.Lock()
 	defer jpmux.Unlock()
 
 	var ok bool
 	if jc, ok = jp[key]; !ok {
-		jc = NewJointCache(key, master)
+		jc = NewJointCache(key)
 		jp[key] = jc
 	}
 	return

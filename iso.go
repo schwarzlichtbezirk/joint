@@ -13,7 +13,7 @@ import (
 // to access to nested files.
 // Key is external path, to ISO9660-file disk image at local filesystem.
 type IsoJoint struct {
-	file  Joint
+	Base  Joint
 	img   *iso.Image
 	cache map[string]*iso.File
 
@@ -21,20 +21,15 @@ type IsoJoint struct {
 	*io.SectionReader
 }
 
-func NewIsoJoint() Joint {
-	return &IsoJoint{}
-}
-
 func (j *IsoJoint) Make(base Joint, isopath string) (err error) {
 	if base == nil {
 		base = &SysJoint{}
 	}
-	var f fs.File
-	if f, err = base.Open(isopath); err != nil {
+	if _, err = base.Open(isopath); err != nil {
 		return
 	}
-	j.file = f.(Joint)
-	if j.img, err = iso.OpenImage(j.file); err != nil {
+	j.Base = base
+	if j.img, err = iso.OpenImage(j.Base); err != nil {
 		return
 	}
 	j.cache = map[string]*iso.File{}
@@ -45,9 +40,11 @@ func (j *IsoJoint) Make(base Joint, isopath string) (err error) {
 }
 
 func (j *IsoJoint) Cleanup() error {
-	j.Close()
-	var err = j.file.Close()
-	j.file = nil
+	if j.Busy() {
+		j.Close()
+	}
+	var err = j.Base.Cleanup()
+	j.Base = nil
 	return err
 }
 

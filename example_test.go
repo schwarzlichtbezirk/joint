@@ -41,6 +41,28 @@ func ExampleSplitUrl() {
 	// addr: https://pkg.go.dev, path: github.com/schwarzlichtbezirk/joint
 }
 
+func ExampleSplitKey() {
+	var list = []string{
+		"some/path/fox.txt",
+		"testdata/external.iso",
+		"testdata/external.iso/fox.txt",
+		"testdata/external.iso/disk/internal.iso/fox.txt",
+		"ftp://music:x@192.168.1.1:21/Music",
+		"ftp://music:x@192.168.1.1:21/testdata/external.iso/disk/internal.iso/docs/doc1.txt",
+	}
+	for _, s := range list {
+		var key, fpath = jnt.SplitKey(s)
+		fmt.Printf("key: '%s', path: '%s'\n", key, fpath)
+	}
+	// Output:
+	// key: '', path: 'some/path/fox.txt'
+	// key: 'testdata/external.iso', path: ''
+	// key: 'testdata/external.iso', path: 'fox.txt'
+	// key: 'testdata/external.iso/disk/internal.iso', path: 'fox.txt'
+	// key: 'ftp://music:x@192.168.1.1:21', path: 'Music'
+	// key: 'ftp://music:x@192.168.1.1:21/testdata/external.iso/disk/internal.iso', path: 'docs/doc1.txt'
+}
+
 func ExampleFtpEscapeBrackets() {
 	fmt.Println(jnt.FtpEscapeBrackets("Music/Denney [2018]"))
 	// Output: Music/Denney [[]2018[]]
@@ -91,12 +113,12 @@ func ExampleReadDir() {
 }
 
 func ExampleNewJointCache() {
-	var jc = jnt.NewJointCache("testdata/external.iso", jnt.NewIsoJoint)
+	var jc = jnt.NewJointCache("testdata/external.iso")
 	defer jc.Close()
 }
 
 func ExampleJointCache_Open() {
-	var jc = jnt.GetJointCache("testdata/external.iso", jnt.NewIsoJoint)
+	var jc = jnt.GetJointCache("testdata/external.iso")
 	var f, err = jc.Open("fox.txt")
 	if err != nil {
 		log.Fatal(err)

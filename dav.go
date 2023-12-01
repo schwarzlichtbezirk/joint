@@ -4,14 +4,16 @@ import (
 	"io"
 	"io/fs"
 	"strings"
+	"sync"
 
 	"github.com/studio-b12/gowebdav"
 )
 
 type DavFileInfo = gowebdav.File
 
-// DavPath is map of WebDAV servises root paths by services URLs.
-var DavPath = map[string]string{}
+// davpath is global map of WebDAV servises root paths by services URLs.
+var davpath = map[string]string{}
+var davmux sync.RWMutex
 
 func GetDavPath(davurl string) (dpath, fpath string, ok bool) {
 	defer func() {
@@ -20,7 +22,10 @@ func GetDavPath(davurl string) (dpath, fpath string, ok bool) {
 		}
 	}()
 	var addr, route = SplitUrl(davurl)
-	if dpath, ok = DavPath[addr]; ok {
+	davmux.RLock()
+	dpath, ok = davpath[addr]
+	davmux.RUnlock()
+	if ok {
 		return
 	}
 
@@ -33,11 +38,13 @@ func GetDavPath(davurl string) (dpath, fpath string, ok bool) {
 		dpath += chunk + "/"
 		var client = gowebdav.NewClient(dpath, "", "")
 		if fi, err := client.Stat(""); err == nil && fi.IsDir() {
-			var jc = GetJointCache(dpath, NewDavJoint)
+			var jc = GetJointCache(dpath)
 			jc.Put(JointWrap{jc, &DavJoint{
 				client: client,
 			}})
-			DavPath[addr] = dpath
+			davmux.Lock()
+			davpath[addr] = dpath
+			davmux.Unlock()
 			ok = true
 			return
 		}
@@ -55,10 +62,6 @@ type DavJoint struct {
 	io.ReadCloser
 	pos int64
 	end int64
-}
-
-func NewDavJoint() Joint {
-	return &DavJoint{}
 }
 
 func (j *DavJoint) Make(base Joint, urladdr string) (err error) {

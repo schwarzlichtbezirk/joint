@@ -24,17 +24,6 @@ var (
 	pwdmux sync.RWMutex
 )
 
-// SplitUrl splits URL to address string and to path as is.
-func SplitUrl(urlpath string) (string, string) {
-	if i := strings.Index(urlpath, "://"); i != -1 {
-		if j := strings.Index(urlpath[i+3:], "/"); j != -1 {
-			return urlpath[:i+3+j], urlpath[i+3+j+1:]
-		}
-		return urlpath, ""
-	}
-	return "", urlpath
-}
-
 // FtpPwd return FTP current directory. It's used cache to avoid
 // extra calls to FTP-server to get current directory for every call.
 func FtpPwd(ftpaddr string, conn *ftp.ServerConn) (pwd string) {
@@ -90,10 +79,6 @@ type FtpJoint struct {
 	io.ReadCloser
 	pos int64
 	end int64
-}
-
-func NewFtpJoint() Joint {
-	return &FtpJoint{}
 }
 
 func (j *FtpJoint) Make(base Joint, urladdr string) (err error) {

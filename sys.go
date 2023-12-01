@@ -10,10 +10,6 @@ type SysJoint struct {
 	*os.File
 }
 
-func NewSysJoint() Joint {
-	return &SysJoint{}
-}
-
 func (j *SysJoint) Make(base Joint, dir string) (err error) {
 	j.dir = dir
 	return

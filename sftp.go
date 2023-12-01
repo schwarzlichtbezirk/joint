@@ -40,10 +40,6 @@ type SftpJoint struct {
 	*sftp.File
 }
 
-func NewSftpJoint() Joint {
-	return &SftpJoint{}
-}
-
 func (j *SftpJoint) Make(base Joint, urladdr string) (err error) {
 	var u *url.URL
 	if u, err = url.Parse(urladdr); err != nil {
