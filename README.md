@@ -66,12 +66,7 @@ import (
     jnt "github.com/schwarzlichtbezirk/hms/joint"
 )
 
-const (
-    isopath = "testdata/external.iso"
-    davpath = "https://music:x@192.168.1.1/webdav/"
-    ftppath = "ftp://music:x@192.168.1.1:21"
-    sftppath = "sftp://music:x@192.168.1.1:22"
-)
+var jp = jnt.NewJointPool()
 
 // http://localhost:8080/iso/ - content of ISO-image
 // http://localhost:8080/dav/ - content of WebDAV-server
@@ -79,13 +74,13 @@ const (
 // http://localhost:8080/sftp/ - content of SFTP-server
 func main() {
     http.Handle("/iso/", http.StripPrefix("/iso/", http.FileServer(
-        http.FS(jnt.NewJointCache(isopath)))))
+        http.FS(jp.Get("testdata/external.iso")))))
     http.Handle("/dav/", http.StripPrefix("/dav/", http.FileServer(
-        http.FS(jnt.NewJointCache(davpath)))))
+        http.FS(jp.Get("https://music:x@192.168.1.1/webdav/")))))
     http.Handle("/ftp/", http.StripPrefix("/ftp/", http.FileServer(
-        http.FS(jnt.NewJointCache(ftppath)))))
+        http.FS(jp.Get("ftp://music:x@192.168.1.1:21")))))
     http.Handle("/sftp/", http.StripPrefix("/sftp/", http.FileServer(
-        http.FS(jnt.NewJointCache(sftppath)))))
+        http.FS(jp.Get("sftp://music:x@192.168.1.1:22")))))
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
@@ -112,10 +107,12 @@ func main() {
     if err = j.Make(nil, "testdata/external.iso"); err != nil {
         log.Fatal(err)
     }
-    defer j.Cleanup() // Cleanup drops joint's link
+    // Cleanup drops joint's link at the end. Any not cached joints
+    // should be destroyed by Cleanup call.
+    defer j.Cleanup()
 
     // Working with file object returned by Open-function.
-    // Close-call on this file will never put joint to cache in any case.
+    // Open-function returns joint casted to fs.File.
     var f fs.File
     if f, err = j.Open("fox.txt"); err != nil {
         log.Fatal(err)
@@ -157,27 +154,54 @@ func main() {
     var err error
 
     // Create joint to external ISO-image.
+    // This joint will be removed by top-level joint.
     var j1 jnt.Joint = &jnt.IsoJoint{}
     if err = j1.Make(nil, "testdata/external.iso"); err != nil {
         log.Fatal(err)
     }
-    defer j1.Cleanup()
 
-    // Create joint to internal ISO-image placed inside of first.
+    // Create top-level joint to internal ISO-image placed inside of first.
     var j2 jnt.Joint = &jnt.IsoJoint{}
     if err = j2.Make(j1, "disk/internal.iso"); err != nil {
         log.Fatal(err)
     }
-    defer j2.Cleanup()
+    defer j2.Cleanup() // only top-level joint must be called for Cleanup
 
     // Open file at internal ISO-image.
     var f fs.File
-    if f, err = j.Open("fox.txt"); err != nil {
+    if f, err = j2.Open("fox.txt"); err != nil {
         log.Fatal(err)
     }
     defer f.Close()
 
     io.Copy(os.Stdout, f)
+}
+```
+
+### Simple file reading
+
+```go
+package main
+
+import (
+    "io"
+    "log"
+    "os"
+
+    jnt "github.com/schwarzlichtbezirk/joint"
+)
+
+var jp = jnt.NewJointPool()
+
+func main() {
+    // Open file and get the joint by one call.
+    var j, err = jp.Open("testdata/external.iso/disk/internal.iso/docs/doc1.txt")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer j.Close()
+
+    io.Copy(os.Stdout, j)
 }
 ```
 

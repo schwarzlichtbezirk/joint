@@ -12,7 +12,7 @@ func TestWrapper(t *testing.T) {
 	var err error
 	var jw jnt.JointWrap
 
-	var jc = jnt.NewJointCache(extpath)
+	var jc = jnt.NewJointCache("testdata/external.iso")
 	defer jc.Close()
 
 	// create joint
@@ -68,7 +68,7 @@ func TestCacheGetPut(t *testing.T) {
 	var j1, j2 any
 	var jw jnt.JointWrap
 
-	var jc = jnt.NewJointCache(extpath)
+	var jc = jnt.NewJointCache("testdata/external.iso")
 	defer jc.Close()
 
 	// create joint
@@ -112,37 +112,54 @@ func TestCacheGetPut(t *testing.T) {
 	}
 }
 
-func TestMakeJoint(t *testing.T) {
-	var j, err = jnt.MakeJoint("testdata/external.iso/disk/internal.iso")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer j.Cleanup()
+func TestCacheOpen(t *testing.T) {
+	var err error
 
+	var jc = jnt.NewJointCache("testdata/external.iso")
+	defer jc.Close()
+
+	var list = []string{
+		"fox.txt",
+		"data/lorem1.txt",
+		"data/lorem2.txt",
+		"data/lorem3.txt",
+		"data/рыба.txt",
+	}
+	var files = make([]fs.File, len(list))
+	if jc.Count() != 0 {
+		t.Fatalf("expected %d joints in cache, got %d", 0, jc.Count())
+	}
+	// open several files at once
+	for i, fpath := range list {
+		if files[i], err = jc.Open(fpath); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if jc.Count() != 0 {
+		t.Fatalf("expected %d joints in cache, got %d", 0, jc.Count())
+	}
+	// close all opened files
+	for _, f := range files {
+		if err = f.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// all joints of those files should be in cache
+	if jc.Count() != len(list) {
+		t.Fatalf("expected %d joints in cache, got %d", len(list), jc.Count())
+	}
+	// open some file again
 	var f fs.File
-	if f, err = j.Open("fox.txt"); err != nil {
+	if f, err = jc.Open(list[0]); err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-
-	var b [9]byte // buffer for "brown fox" chunk from file content
-	if _, err = j.ReadAt(b[:], 10); err != nil {
-		t.Fatal(err)
+	// joint for this file should been taken from cache
+	if jc.Count() != len(list)-1 {
+		t.Fatalf("expected %d joints in cache, got %d", len(list)-1, jc.Count())
 	}
-	if string(b[:]) != "brown fox" {
-		t.Fatal("read string does not match to pattern")
-	}
-
-	// check up joints chain
-	var ok bool
-	var j0, j1 *jnt.IsoJoint
-	if j0, ok = j.(*jnt.IsoJoint); !ok {
-		t.Fatal("can not cast to ISO joint")
-	}
-	if j1, ok = j0.Base.(*jnt.IsoJoint); !ok {
-		t.Fatal("can not cast base to ISO joint")
-	}
-	if _, ok = j1.Base.(*jnt.SysJoint); !ok {
-		t.Fatal("can not cast primary joint to system joint")
+	f.Close()
+	// cache should be restored
+	if jc.Count() != len(list) {
+		t.Fatalf("expected %d joints in cache, got %d", len(list), jc.Count())
 	}
 }

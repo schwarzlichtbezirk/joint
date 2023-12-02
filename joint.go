@@ -27,9 +27,22 @@ type Joint interface {
 	RFile
 }
 
+// JointWrap helps to return joint into cache after Close-call.
 type JointWrap struct {
 	jc *JointCache
 	Joint
+}
+
+// GetCache returns binded cache.
+func (jw JointWrap) GetCache() *JointCache {
+	return jw.jc
+}
+
+// Cleanup ejects itself from binded cache, and make inner Cleanup-call.
+// This function is for special cases only.
+func (jw JointWrap) Cleanup() error {
+	jw.Eject()
+	return jw.Joint.Cleanup()
 }
 
 func (jw JointWrap) Close() error {
@@ -84,7 +97,12 @@ func NewJointCache(key string) *JointCache {
 	}
 }
 
-// Open implements fs.FS interface.
+func (jc *JointCache) Key() string {
+	return jc.key
+}
+
+// Open implements fs.FS interface,
+// and returns file that can be casted to joint wrapper.
 func (jc *JointCache) Open(fpath string) (f fs.File, err error) {
 	var jw JointWrap
 	if jw, err = jc.Get(); err != nil {
@@ -212,61 +230,6 @@ func (jc *JointCache) Put(j Joint) {
 			j.Cleanup()
 		}
 	}))
-}
-
-// jp is map with joint caches.
-// Each key is path to file system resource,
-// value - cached for this resource list of joints.
-var jp = map[string]*JointCache{}
-var jpmux sync.RWMutex
-
-// GetJointCache returns cache from pool for given key path, or creates new one.
-func GetJointCache(key string) (jc *JointCache) {
-	jpmux.Lock()
-	defer jpmux.Unlock()
-
-	var ok bool
-	if jc, ok = jp[key]; !ok {
-		jc = NewJointCache(key)
-		jp[key] = jc
-	}
-	return
-}
-
-// JointPool returns copy of joints pool.
-func JointPool() map[string]*JointCache {
-	jpmux.RLock()
-	defer jpmux.RUnlock()
-
-	var m = make(map[string]*JointCache, len(jp))
-	for key, jc := range jp {
-		m[key] = jc
-	}
-	return m
-}
-
-// JointPoolKeys returns list of all joints key paths.
-func JointPoolKeys() []string {
-	jpmux.RLock()
-	defer jpmux.RUnlock()
-
-	var list = make([]string, len(jp))
-	var i = 0
-	for key := range jp {
-		list[i] = key
-		i++
-	}
-	return list
-}
-
-// ClearJointPool resets all caches.
-func ClearJointPool() {
-	jpmux.Lock()
-	defer jpmux.Unlock()
-	for _, jc := range jp {
-		jc.Close()
-	}
-	clear(jp)
 }
 
 // The End.

@@ -12,9 +12,12 @@ import (
 type DavFileInfo = gowebdav.File
 
 // davpath is global map of WebDAV servises root paths by services URLs.
+// External links are external in all cases, so this object is singleton.
 var davpath = map[string]string{}
 var davmux sync.RWMutex
 
+// GetDavPath searches true path to WebDAV resource
+// by checking step-by-step elements of the path.
 func GetDavPath(davurl string) (dpath, fpath string, ok bool) {
 	defer func() {
 		if ok && dpath != davurl+"/" {
@@ -38,10 +41,6 @@ func GetDavPath(davurl string) (dpath, fpath string, ok bool) {
 		dpath += chunk + "/"
 		var client = gowebdav.NewClient(dpath, "", "")
 		if fi, err := client.Stat(""); err == nil && fi.IsDir() {
-			var jc = GetJointCache(dpath)
-			jc.Put(JointWrap{jc, &DavJoint{
-				client: client,
-			}})
 			davmux.Lock()
 			davpath[addr] = dpath
 			davmux.Unlock()

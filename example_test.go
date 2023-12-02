@@ -68,8 +68,11 @@ func ExampleFtpEscapeBrackets() {
 	// Output: Music/Denney [[]2018[]]
 }
 
-func ExampleOpenFile() {
-	var j, err = jnt.OpenFile("testdata/external.iso/fox.txt")
+func ExampleJointPool_Open() {
+	var jp = jnt.NewJointPool() // can be global declaration
+	defer jp.Close()
+
+	var j, err = jp.Open("testdata/external.iso/fox.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -79,8 +82,11 @@ func ExampleOpenFile() {
 	// Output: The quick brown fox jumps over the lazy dog.
 }
 
-func ExampleStatFile() {
-	var fi, err = jnt.StatFile("testdata/external.iso/fox.txt")
+func ExampleJointPool_Stat() {
+	var jp = jnt.NewJointPool() // can be global declaration
+	defer jp.Close()
+
+	var fi, err = jp.Stat("testdata/external.iso/fox.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -89,8 +95,11 @@ func ExampleStatFile() {
 	// name: fox.txt, size: 44
 }
 
-func ExampleReadDir() {
-	var files, err = jnt.ReadDir("testdata/external.iso/data")
+func ExampleJointPool_ReadDir() {
+	var jp = jnt.NewJointPool() // can be global declaration
+	defer jp.Close()
+
+	var files, err = jp.ReadDir("testdata/external.iso/data")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -112,18 +121,16 @@ func ExampleReadDir() {
 	// file: рыба.txt, 1789 bytes
 }
 
-func ExampleNewJointCache() {
+func ExampleJointCache_Open() {
 	var jc = jnt.NewJointCache("testdata/external.iso")
 	defer jc.Close()
-}
 
-func ExampleJointCache_Open() {
-	var jc = jnt.GetJointCache("testdata/external.iso")
 	var f, err = jc.Open("fox.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer f.Close()
+
 	io.Copy(os.Stdout, f)
 	// Output: The quick brown fox jumps over the lazy dog.
 }
