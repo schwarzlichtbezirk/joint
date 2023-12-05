@@ -1,4 +1,4 @@
-﻿package joint_test
+package joint_test
 
 import (
 	"fmt"

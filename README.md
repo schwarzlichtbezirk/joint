@@ -12,27 +12,6 @@ You can read the contents of a folder on an FTP-server either sequentially throu
 
 ## Examples
 
-### HTTP file server with ISO-image content
-
-```go
-package main
-
-import (
-    "log"
-    "net/http"
-
-    jnt "github.com/schwarzlichtbezirk/hms/joint"
-)
-
-// Open http://localhost:8080/ in browser
-// to get a list of files in ISO-image.
-func main() {
-    var jc = jnt.NewJointCache("testdata/external.iso")
-    http.Handle("/", http.FileServer(http.FS(jc)))
-    log.Fatal(http.ListenAndServe(":8080", nil))
-}
-```
-
 ### HTTP file server with WebDAV content
 
 ```go
@@ -50,6 +29,34 @@ import (
 func main() {
     var jc = jnt.NewJointCache("https://music:x@192.168.1.1/webdav/")
     http.Handle("/", http.FileServer(http.FS(jc)))
+    log.Fatal(http.ListenAndServe(":8080", nil))
+}
+```
+
+### HTTP file server with ISO-image content
+
+```go
+package main
+
+import (
+    "log"
+    "net/http"
+
+    jnt "github.com/schwarzlichtbezirk/hms/joint"
+)
+
+// Open http://localhost:8080/ in browser
+// to get a list of files in ISO-image.
+func main() {
+    // create map with caches for all currently unused joints
+    var jp = jnt.NewJointPool()
+    // file system, that shares content of "testdata" folder
+    // and all embedded into ISO-disks files
+    var sp, err = jp.Sub("testdata")
+    if err != nil {
+        log.Fatal(err)
+    }
+    http.Handle("/", http.FileServer(http.FS(sp)))
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
@@ -73,14 +80,17 @@ var jp = jnt.NewJointPool()
 // http://localhost:8080/ftp/ - content of FTP-server
 // http://localhost:8080/sftp/ - content of SFTP-server
 func main() {
+    // create map with caches for all currently unused joints
+    var jp = jnt.NewJointPool()
+    // handle list of resources as binded file systems
     http.Handle("/iso/", http.StripPrefix("/iso/", http.FileServer(
-        http.FS(jp.Get("testdata/external.iso")))))
+        http.FS(jnt.NewSubPool(jp, "testdata/external.iso")))))
     http.Handle("/dav/", http.StripPrefix("/dav/", http.FileServer(
-        http.FS(jp.Get("https://music:x@192.168.1.1/webdav/")))))
+        http.FS(jnt.NewSubPool(jp, "https://music:x@192.168.1.1/webdav/")))))
     http.Handle("/ftp/", http.StripPrefix("/ftp/", http.FileServer(
-        http.FS(jp.Get("ftp://music:x@192.168.1.1:21")))))
+        http.FS(jnt.NewSubPool(jp, "ftp://music:x@192.168.1.1:21")))))
     http.Handle("/sftp/", http.StripPrefix("/sftp/", http.FileServer(
-        http.FS(jp.Get("sftp://music:x@192.168.1.1:22")))))
+        http.FS(jnt.NewSubPool(jp, "sftp://music:x@192.168.1.1:22")))))
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```

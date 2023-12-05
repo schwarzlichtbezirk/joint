@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 
 	jnt "github.com/schwarzlichtbezirk/joint"
@@ -133,6 +134,21 @@ func ExampleJointCache_Open() {
 
 	io.Copy(os.Stdout, f)
 	// Output: The quick brown fox jumps over the lazy dog.
+}
+
+// Open http://localhost:8080/ in browser
+// to get a list of files in ISO-image.
+func ExampleJointPool_Sub() {
+	// create map with caches for all currently unused joints
+	var jp = jnt.NewJointPool()
+	// file system, that shares content of "testdata" folder
+	// and all embedded into ISO-disks files
+	var sp, err = jp.Sub("testdata")
+	if err != nil {
+		log.Fatal(err)
+	}
+	http.Handle("/", http.FileServer(http.FS(sp)))
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 // The End.

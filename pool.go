@@ -242,4 +242,78 @@ func (jp *JointPool) ReadDir(fullpath string) (ret []fs.DirEntry, err error) {
 	return j.ReadDir(-1)
 }
 
+// Sub returns new file subsystem with given absolute root directory.
+// Sub implements fs.SubFS interface,
+// and returns object that can be casted to *SubPool.
+func (jp *JointPool) Sub(dir string) (fs.FS, error) {
+	var fi, err = jp.Stat(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.IsDir() && IsTypeIso(dir) {
+		return nil, fs.ErrNotExist
+	}
+	return &SubPool{
+		JointPool: jp,
+		dir:       dir,
+	}, nil
+}
+
+// SubPool releases io/fs interfaces in the way that
+// can be used for http-handlers. It has pointer to pool,
+// so several derived file subsystems can share same pool
+// of caches.
+type SubPool struct {
+	*JointPool
+	dir string
+}
+
+// NewSubPool creates new SubPool objects with given pool of caches
+// and given absolute root directory.
+func NewSubPool(jp *JointPool, dir string) *SubPool {
+	return &SubPool{jp, dir}
+}
+
+// Dir returns root directory of this file subsystem.
+func (sp *SubPool) Dir() string {
+	return sp.dir
+}
+
+// Open implements fs.FS interface,
+// and returns file that can be casted to joint wrapper.
+func (sp *SubPool) Open(fullpath string) (f fs.File, err error) {
+	fullpath = JoinFast(sp.dir, fullpath)
+	return sp.JointPool.Open(fullpath)
+}
+
+// Stat implements fs.StatFS interface.
+func (sp *SubPool) Stat(fullpath string) (fi fs.FileInfo, err error) {
+	fullpath = JoinFast(sp.dir, fullpath)
+	return sp.JointPool.Stat(fullpath)
+}
+
+// ReadDir implements ReadDirFS interface.
+func (sp *SubPool) ReadDir(fullpath string) (ret []fs.DirEntry, err error) {
+	fullpath = JoinFast(sp.dir, fullpath)
+	return sp.JointPool.ReadDir(fullpath)
+}
+
+// Sub returns new file subsystem with given relative root directory.
+// Sub implements fs.SubFS interface,
+// and returns object that can be casted to *SubPool.
+func (sp *SubPool) Sub(dir string) (fs.FS, error) {
+	dir = JoinFast(sp.dir, dir)
+	var fi, err = sp.JointPool.Stat(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.IsDir() && IsTypeIso(dir) {
+		return nil, fs.ErrNotExist
+	}
+	return &SubPool{
+		JointPool: sp.JointPool,
+		dir:       dir,
+	}, nil
+}
+
 // The End.
