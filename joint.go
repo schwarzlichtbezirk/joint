@@ -108,13 +108,10 @@ func (jc *JointCache) Open(fpath string) (f fs.File, err error) {
 	if jw, err = jc.Get(); err != nil {
 		return
 	}
-	if fpath == "." {
-		fpath = ""
-	}
 	if _, err = jw.Open(fpath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			jc.Put(jw) // reuse joint
-		} else {
+		} else if !errors.Is(err, fs.ErrExist) {
 			jw.Cleanup() // drop the joint
 		}
 		return

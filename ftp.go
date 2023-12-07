@@ -111,6 +111,12 @@ func (j *FtpJoint) Busy() bool {
 }
 
 func (j *FtpJoint) Open(fpath string) (file fs.File, err error) {
+	if j.Busy() {
+		return nil, fs.ErrExist
+	}
+	if fpath == "." {
+		fpath = ""
+	}
 	j.path = fpath
 	return j, nil
 }

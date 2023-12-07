@@ -19,6 +19,7 @@ type IsoJoint struct {
 
 	*iso.File
 	*io.SectionReader
+	rdn int
 }
 
 func (j *IsoJoint) Make(base Joint, isopath string) (err error) {
@@ -53,14 +54,20 @@ func (j *IsoJoint) Busy() bool {
 }
 
 func (j *IsoJoint) Open(fpath string) (file fs.File, err error) {
+	if j.Busy() {
+		return nil, fs.ErrExist
+	}
+	if fpath == "." {
+		fpath = ""
+	}
 	if j.File, err = j.OpenFile(fpath); err != nil {
 		return
 	}
 	if sr := j.File.Reader(); sr != nil {
 		j.SectionReader = sr.(*io.SectionReader)
 	}
-	file = j
-	return
+	j.rdn = 0 // start new sequence
+	return j, nil
 }
 
 func (j *IsoJoint) Close() error {
@@ -69,27 +76,29 @@ func (j *IsoJoint) Close() error {
 	return nil
 }
 
-func (j *IsoJoint) OpenFile(intpath string) (file *iso.File, err error) {
-	if file, ok := j.cache[intpath]; ok {
+func (j *IsoJoint) OpenFile(fpath string) (*iso.File, error) {
+	if file, ok := j.cache[fpath]; ok {
 		return file, nil
+	}
+	if !fs.ValidPath(fpath) {
+		return nil, fs.ErrInvalid
 	}
 
 	var dec = charmap.Windows1251.NewDecoder()
 	var curdir string
-	var chunks = strings.Split(intpath, "/")
-	file = j.cache[curdir] // get root directory
+	var chunks = strings.Split(fpath, "/")
+	var file = j.cache[curdir] // get root directory
 	for _, chunk := range chunks {
 		if !file.IsDir() {
-			err = fs.ErrNotExist
-			return
+			return nil, fs.ErrNotExist
 		}
 		var curpath = JoinFast(curdir, chunk)
 		if f, ok := j.cache[curpath]; ok {
-			file = f
+			file = f // the file must be unchanged otherwise
 		} else {
-			var list []*iso.File
-			if list, err = file.GetChildren(); err != nil {
-				return
+			var list, err = file.GetChildren()
+			if err != nil {
+				return nil, err
 			}
 			var found = false
 			for _, file = range list {
@@ -101,13 +110,12 @@ func (j *IsoJoint) OpenFile(intpath string) (file *iso.File, err error) {
 				}
 			}
 			if !found {
-				err = fs.ErrNotExist
-				return
+				return nil, fs.ErrNotExist
 			}
 		}
 		curdir = curpath
 	}
-	return
+	return file, nil
 }
 
 func (j *IsoJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
@@ -115,15 +123,22 @@ func (j *IsoJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	if files, err = j.File.GetChildren(); err != nil {
 		return
 	}
-	ret = make([]fs.DirEntry, 0, len(files))
-	for i, file := range files {
-		if i == n {
-			break
-		}
-		ret = append(ret, fs.FileInfoToDirEntry(IsoFileInfo{
-			File: file,
-		}))
+	if n < 0 {
+		n = len(files) - j.rdn
+	} else if n > len(files)-j.rdn {
+		n = len(files) - j.rdn
+		err = io.EOF
 	}
+	if n <= 0 { // on case all files readed or some deleted
+		return
+	}
+	ret = make([]fs.DirEntry, n)
+	for i := 0; i < n; i++ {
+		ret[i] = fs.FileInfoToDirEntry(IsoFileInfo{
+			File: files[j.rdn+i],
+		})
+	}
+	j.rdn += n
 	return
 }
 

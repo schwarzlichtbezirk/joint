@@ -79,12 +79,17 @@ func (j *SftpJoint) Busy() bool {
 
 // Opens new connection for any some one file with given full SFTP URL.
 func (j *SftpJoint) Open(fpath string) (file fs.File, err error) {
+	if j.Busy() {
+		return nil, fs.ErrExist
+	}
+	if fpath == "." {
+		fpath = ""
+	}
 	j.path = fpath
 	if j.File, err = j.client.Open(JoinFast(j.pwd, fpath)); err != nil {
 		return
 	}
-	file = j
-	return
+	return j, nil
 }
 
 func (j *SftpJoint) Close() (err error) {

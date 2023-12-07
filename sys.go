@@ -29,11 +29,13 @@ func (j *SysJoint) Busy() bool {
 
 // Opens file at local file system.
 func (j *SysJoint) Open(fpath string) (file fs.File, err error) {
+	if j.Busy() {
+		return nil, fs.ErrExist
+	}
 	if j.File, err = os.Open(JoinFast(j.dir, fpath)); err != nil {
 		return
 	}
-	file = j
-	return
+	return j, nil
 }
 
 func (j *SysJoint) Close() (err error) {

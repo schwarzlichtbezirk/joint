@@ -61,6 +61,7 @@ type DavJoint struct {
 	io.ReadCloser
 	pos int64
 	end int64
+	rdn int
 }
 
 func (j *DavJoint) Make(base Joint, urladdr string) (err error) {
@@ -83,7 +84,14 @@ func (j *DavJoint) Busy() bool {
 }
 
 func (j *DavJoint) Open(fpath string) (file fs.File, err error) {
+	if j.Busy() {
+		return nil, fs.ErrExist
+	}
+	if fpath == "." {
+		fpath = ""
+	}
 	j.path = fpath
+	j.rdn = 0 // start new sequence
 	return j, nil
 }
 
@@ -103,13 +111,20 @@ func (j *DavJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	if files, err = j.client.ReadDir(j.path); err != nil {
 		return
 	}
-	ret = make([]fs.DirEntry, 0, len(files))
-	for i, fi := range files {
-		if i == n {
-			break
-		}
-		ret = append(ret, fs.FileInfoToDirEntry(fi))
+	if n < 0 {
+		n = len(files) - j.rdn
+	} else if n > len(files)-j.rdn {
+		n = len(files) - j.rdn
+		err = io.EOF
 	}
+	if n <= 0 { // on case all files readed or some deleted
+		return
+	}
+	ret = make([]fs.DirEntry, n)
+	for i := 0; i < n; i++ {
+		ret[i] = fs.FileInfoToDirEntry(files[j.rdn+i])
+	}
+	j.rdn += n
 	return
 }
 
