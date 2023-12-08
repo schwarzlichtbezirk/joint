@@ -2,8 +2,11 @@ package joint
 
 import (
 	"errors"
+	"io"
 	"io/fs"
 	"net/url"
+	"strings"
+	"sync"
 
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
@@ -11,20 +14,26 @@ import (
 
 type SftpFileStat = sftp.FileStat
 
+var (
+	pwdmap = map[string]string{}
+	pwdmux sync.RWMutex
+)
+
 // SftpPwd return SFTP current directory. It's used cache to avoid
 // extra calls to SFTP-server to get current directory for every call.
-func SftpPwd(ftpaddr string, client *sftp.Client) (pwd string) {
+func SftpPwd(ftpaddr string, client *sftp.Client) (pwd string, err error) {
 	pwdmux.RLock()
 	pwd, ok := pwdmap[ftpaddr]
 	pwdmux.RUnlock()
-	if !ok {
-		var err error
-		if pwd, err = client.Getwd(); err == nil {
-			pwdmux.Lock()
-			pwdmap[ftpaddr] = pwd
-			pwdmux.Unlock()
-		}
+	if ok {
+		return
 	}
+	if pwd, err = client.Getwd(); err != nil {
+		return
+	}
+	pwdmux.Lock()
+	pwdmap[ftpaddr] = pwd
+	pwdmux.Unlock()
 	return
 }
 
@@ -36,8 +45,10 @@ type SftpJoint struct {
 	client *sftp.Client
 	pwd    string
 
-	path string // path inside of SFTP-service without PWD
+	path  string // path inside of SFTP-service without PWD
+	files []fs.FileInfo
 	*sftp.File
+	rdn int
 }
 
 func (j *SftpJoint) Make(base Joint, urladdr string) (err error) {
@@ -59,7 +70,13 @@ func (j *SftpJoint) Make(base Joint, urladdr string) (err error) {
 	if j.client, err = sftp.NewClient(j.conn); err != nil {
 		return
 	}
-	j.pwd = SftpPwd(u.Host, j.client)
+	if j.pwd, err = SftpPwd(u.Host, j.client); err != nil {
+		return
+	}
+	if u.Path != "" && u.Path != "/" { // skip empty path
+		var fpath = strings.Trim(u.Path, "/")
+		j.pwd = JoinFast(j.pwd, fpath)
+	}
 	return
 }
 
@@ -82,13 +99,12 @@ func (j *SftpJoint) Open(fpath string) (file fs.File, err error) {
 	if j.Busy() {
 		return nil, fs.ErrExist
 	}
-	if fpath == "." {
-		fpath = ""
-	}
 	j.path = fpath
 	if j.File, err = j.client.Open(JoinFast(j.pwd, fpath)); err != nil {
 		return
 	}
+	j.files = nil // delete previous readdir result
+	j.rdn = 0     // start new sequence
 	return j, nil
 }
 
@@ -102,17 +118,26 @@ func (j *SftpJoint) Close() (err error) {
 }
 
 func (j *SftpJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
-	var files []fs.FileInfo
-	if files, err = j.client.ReadDir(JoinFast(j.pwd, j.path)); err != nil {
+	if j.files == nil {
+		if j.files, err = j.client.ReadDir(JoinFast(j.pwd, j.path)); err != nil {
+			return
+		}
+	}
+
+	if n < 0 {
+		n = len(j.files) - j.rdn
+	} else if n > len(j.files)-j.rdn {
+		n = len(j.files) - j.rdn
+		err = io.EOF
+	}
+	if n <= 0 { // on case all files readed or some deleted
 		return
 	}
-	ret = make([]fs.DirEntry, 0, len(files))
-	for i, fi := range files {
-		if i == n {
-			break
-		}
-		ret = append(ret, fs.FileInfoToDirEntry(fi))
+	ret = make([]fs.DirEntry, n)
+	for i := 0; i < n; i++ {
+		ret[i] = fs.FileInfoToDirEntry(j.files[j.rdn+i])
 	}
+	j.rdn += n
 	return
 }
 

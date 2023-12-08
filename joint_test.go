@@ -104,7 +104,7 @@ func TestCacheGetPut(t *testing.T) {
 	if !jc.Has(jw) {
 		t.Fatalf("joint does not found in the cache")
 	}
-	if !jw.Eject() {
+	if !jc.Eject(jw) {
 		t.Fatal("can not eject joint from cache")
 	}
 	if jc.Has(jw) {

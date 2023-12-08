@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"path"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/jlaffaye/ftp"
@@ -18,29 +17,6 @@ var (
 	ErrFtpWhence = errors.New("invalid whence at FTP seeker")
 	ErrFtpNegPos = errors.New("negative position at FTP seeker")
 )
-
-var (
-	pwdmap = map[string]string{}
-	pwdmux sync.RWMutex
-)
-
-// FtpPwd return FTP current directory. It's used cache to avoid
-// extra calls to FTP-server to get current directory for every call.
-func FtpPwd(ftpaddr string, conn *ftp.ServerConn) (pwd string) {
-	pwdmux.RLock()
-	pwd, ok := pwdmap[ftpaddr]
-	pwdmux.RUnlock()
-	if !ok {
-		var err error
-		if pwd, err = conn.CurrentDir(); err == nil {
-			pwd = strings.TrimPrefix(pwd, "/")
-			pwdmux.Lock()
-			pwdmap[ftpaddr] = pwd
-			pwdmux.Unlock()
-		}
-	}
-	return
-}
 
 // FtpEscapeBrackets escapes square brackets at FTP-path.
 // FTP-server does not recognize path with square brackets
@@ -73,12 +49,13 @@ func FtpEscapeBrackets(s string) string {
 // Key is address of FTP-service, i.e. ftp://user:pass@example.com.
 type FtpJoint struct {
 	conn *ftp.ServerConn
-	pwd  string
 
-	path string // path inside of FTP-service
+	path    string // path inside of FTP-service
+	entries []*ftp.Entry
 	io.ReadCloser
 	pos int64
 	end int64
+	rdn int
 }
 
 func (j *FtpJoint) Make(base Joint, urladdr string) (err error) {
@@ -93,7 +70,12 @@ func (j *FtpJoint) Make(base Joint, urladdr string) (err error) {
 	if err = j.conn.Login(u.User.Username(), pass); err != nil {
 		return
 	}
-	j.pwd = FtpPwd(u.Host, j.conn)
+	if u.Path != "" && u.Path != "/" { // skip empty path
+		var fpath = strings.Trim(u.Path, "/")
+		if err = j.conn.ChangeDir(fpath); err != nil {
+			return
+		}
+	}
 	return
 }
 
@@ -114,10 +96,9 @@ func (j *FtpJoint) Open(fpath string) (file fs.File, err error) {
 	if j.Busy() {
 		return nil, fs.ErrExist
 	}
-	if fpath == "." {
-		fpath = ""
-	}
 	j.path = fpath
+	j.entries = nil // delete previous readdir result
+	j.rdn = 0       // start new sequence
 	return j, nil
 }
 
@@ -133,55 +114,62 @@ func (j *FtpJoint) Close() (err error) {
 }
 
 func (j *FtpJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
-	var fpath = FtpEscapeBrackets(JoinFast(j.pwd, j.path))
-	var entries []*ftp.Entry
-	if entries, err = j.conn.List(fpath); err != nil {
+	if j.entries == nil {
+		var fpath = FtpEscapeBrackets(j.path)
+		if j.entries, err = j.conn.List(fpath); err != nil {
+			return
+		}
+		if len(j.entries) < 2 {
+			return nil, io.ErrUnexpectedEOF
+		}
+		j.entries = j.entries[2:] // skip "." and ".." directories
+	}
+
+	if n < 0 {
+		n = len(j.entries) - j.rdn
+	} else if n > len(j.entries)-j.rdn {
+		n = len(j.entries) - j.rdn
+		err = io.EOF
+	}
+	if n <= 0 { // on case all files readed or some deleted
 		return
 	}
-	ret = make([]fs.DirEntry, 0, len(entries))
-	for i, ent := range entries {
-		if i == n {
-			break
-		}
-		if ent.Name != "." && ent.Name != ".." {
-			ret = append(ret, fs.FileInfoToDirEntry(FtpFileInfo{ent}))
-		}
+	ret = make([]fs.DirEntry, n)
+	for i := 0; i < n; i++ {
+		ret[i] = fs.FileInfoToDirEntry(FtpFileInfo{j.entries[j.rdn+i]})
 	}
+	j.rdn += n
 	return
 }
 
 func (j *FtpJoint) Stat() (fi fs.FileInfo, err error) {
 	var ent *ftp.Entry
-	if ent, err = j.conn.GetEntry(JoinFast(j.pwd, j.path)); err != nil {
+	if ent, err = j.conn.GetEntry(j.path); err != nil {
 		return
 	}
-	fi = FtpFileInfo{
-		ent,
-	}
+	fi = FtpFileInfo{ent}
 	return
 }
 
 func (j *FtpJoint) Info(fpath string) (fi fs.FileInfo, err error) {
 	var ent *ftp.Entry
-	if ent, err = j.conn.GetEntry(JoinFast(j.pwd, fpath)); err != nil {
+	if ent, err = j.conn.GetEntry(fpath); err != nil {
 		return
 	}
-	fi = FtpFileInfo{
-		ent,
-	}
+	fi = FtpFileInfo{ent}
 	return
 }
 
 func (j *FtpJoint) Size() int64 {
 	if j.end == 0 {
-		j.end, _ = j.conn.FileSize(JoinFast(j.pwd, j.path))
+		j.end, _ = j.conn.FileSize(j.path)
 	}
 	return j.end
 }
 
 func (j *FtpJoint) Read(b []byte) (n int, err error) {
 	if j.ReadCloser == nil {
-		if j.ReadCloser, err = j.conn.RetrFrom(JoinFast(j.pwd, j.path), uint64(j.pos)); err != nil {
+		if j.ReadCloser, err = j.conn.RetrFrom(j.path, uint64(j.pos)); err != nil {
 			return
 		}
 	}
@@ -192,7 +180,7 @@ func (j *FtpJoint) Read(b []byte) (n int, err error) {
 
 func (j *FtpJoint) Write(p []byte) (n int, err error) {
 	var buf = bytes.NewReader(p)
-	err = j.conn.StorFrom(JoinFast(j.pwd, j.path), buf, uint64(j.pos))
+	err = j.conn.StorFrom(j.path, buf, uint64(j.pos))
 	var n64, _ = buf.Seek(0, io.SeekCurrent)
 	j.pos += n64
 	n = int(n64)
@@ -207,7 +195,7 @@ func (j *FtpJoint) Seek(offset int64, whence int) (abs int64, err error) {
 		abs = j.pos + offset
 	case io.SeekEnd:
 		if j.end == 0 {
-			if j.end, err = j.conn.FileSize(JoinFast(j.pwd, j.path)); err != nil {
+			if j.end, err = j.conn.FileSize(j.path); err != nil {
 				return
 			}
 		}
@@ -239,6 +227,18 @@ func (j *FtpJoint) ReadAt(b []byte, off int64) (n int, err error) {
 	}
 	j.pos = off
 	return j.Read(b)
+}
+
+func (j *FtpJoint) CurrentDir() (wd string, err error) {
+	return j.conn.CurrentDir()
+}
+
+func (j *FtpJoint) ChangeDir(wd string) (err error) {
+	return j.conn.ChangeDir(wd)
+}
+
+func (j *FtpJoint) ChangeDirToParent() (err error) {
+	return j.conn.ChangeDirToParent()
 }
 
 // FtpFileInfo encapsulates ftp.Entry structure and provides fs.FileInfo implementation.

@@ -57,7 +57,8 @@ func GetDavPath(davurl string) (dpath, fpath string, ok bool) {
 type DavJoint struct {
 	client *gowebdav.Client
 
-	path string // truncated file path from full URL
+	path  string // truncated file path from full URL
+	files []fs.FileInfo
 	io.ReadCloser
 	pos int64
 	end int64
@@ -87,11 +88,9 @@ func (j *DavJoint) Open(fpath string) (file fs.File, err error) {
 	if j.Busy() {
 		return nil, fs.ErrExist
 	}
-	if fpath == "." {
-		fpath = ""
-	}
 	j.path = fpath
-	j.rdn = 0 // start new sequence
+	j.files = nil // delete previous readdir result
+	j.rdn = 0     // start new sequence
 	return j, nil
 }
 
@@ -107,14 +106,16 @@ func (j *DavJoint) Close() (err error) {
 }
 
 func (j *DavJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
-	var files []fs.FileInfo
-	if files, err = j.client.ReadDir(j.path); err != nil {
-		return
+	if j.files == nil {
+		if j.files, err = j.client.ReadDir(j.path); err != nil {
+			return
+		}
 	}
+
 	if n < 0 {
-		n = len(files) - j.rdn
-	} else if n > len(files)-j.rdn {
-		n = len(files) - j.rdn
+		n = len(j.files) - j.rdn
+	} else if n > len(j.files)-j.rdn {
+		n = len(j.files) - j.rdn
 		err = io.EOF
 	}
 	if n <= 0 { // on case all files readed or some deleted
@@ -122,7 +123,7 @@ func (j *DavJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	}
 	ret = make([]fs.DirEntry, n)
 	for i := 0; i < n; i++ {
-		ret[i] = fs.FileInfoToDirEntry(files[j.rdn+i])
+		ret[i] = fs.FileInfoToDirEntry(j.files[j.rdn+i])
 	}
 	j.rdn += n
 	return

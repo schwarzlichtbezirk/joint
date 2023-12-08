@@ -57,9 +57,6 @@ func (j *IsoJoint) Open(fpath string) (file fs.File, err error) {
 	if j.Busy() {
 		return nil, fs.ErrExist
 	}
-	if fpath == "." {
-		fpath = ""
-	}
 	if j.File, err = j.OpenFile(fpath); err != nil {
 		return
 	}
@@ -77,6 +74,9 @@ func (j *IsoJoint) Close() error {
 }
 
 func (j *IsoJoint) OpenFile(fpath string) (*iso.File, error) {
+	if fpath == "." { // dot folder does not accepted
+		fpath = ""
+	}
 	if file, ok := j.cache[fpath]; ok {
 		return file, nil
 	}
@@ -119,10 +119,11 @@ func (j *IsoJoint) OpenFile(fpath string) (*iso.File, error) {
 }
 
 func (j *IsoJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
-	var files []*iso.File
+	var files []*iso.File // children entries cached by previous calls
 	if files, err = j.File.GetChildren(); err != nil {
 		return
 	}
+
 	if n < 0 {
 		n = len(files) - j.rdn
 	} else if n > len(files)-j.rdn {

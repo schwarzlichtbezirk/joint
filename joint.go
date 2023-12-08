@@ -38,37 +38,12 @@ func (jw JointWrap) GetCache() *JointCache {
 	return jw.jc
 }
 
-// Cleanup ejects itself from binded cache, and make inner Cleanup-call.
-// This function is for special cases only.
-func (jw JointWrap) Cleanup() error {
-	jw.Eject()
-	return jw.Joint.Cleanup()
-}
-
 func (jw JointWrap) Close() error {
 	var err = jw.Joint.Close()
 	if jw.jc != nil {
 		jw.jc.Put(jw)
 	}
 	return err
-}
-
-// Eject joint from the cache.
-func (jw JointWrap) Eject() bool {
-	if jw.jc == nil {
-		return false
-	}
-	jw.jc.mux.Lock()
-	defer jw.jc.mux.Unlock()
-	for i, jf := range jw.jc.cache {
-		if jf.Joint == jw.Joint {
-			jw.jc.expire[i].Stop()
-			jw.jc.expire = append(jw.jc.expire[:i], jw.jc.expire[i+1:]...)
-			jw.jc.cache = append(jw.jc.cache[:i], jw.jc.cache[i+1:]...)
-			return true
-		}
-	}
-	return false
 }
 
 type Config struct {
@@ -86,7 +61,7 @@ var Cfg = Config{
 // JointCache implements cache with opened joints to some file system resource.
 type JointCache struct {
 	key    string
-	cache  []JointWrap
+	cache  []Joint
 	expire []*time.Timer
 	mux    sync.Mutex
 }
@@ -160,8 +135,8 @@ func (jc *JointCache) Close() (err error) {
 	jc.expire = nil
 
 	var errs = make([]error, len(jc.cache))
-	for i, jw := range jc.cache {
-		errs[i] = jw.Joint.Cleanup()
+	for i, j := range jc.cache {
+		errs[i] = j.Cleanup()
 	}
 	jc.cache = nil
 	return errors.Join(errs...)
@@ -172,10 +147,12 @@ func (jc *JointCache) Has(j Joint) bool {
 	if jw, ok := j.(JointWrap); ok {
 		j = jw.Joint
 	}
+
 	jc.mux.Lock()
 	defer jc.mux.Unlock()
-	for _, jw := range jc.cache {
-		if jw.Joint == j {
+
+	for _, f := range jc.cache {
+		if f == j {
 			return true
 		}
 	}
@@ -186,12 +163,14 @@ func (jc *JointCache) Has(j Joint) bool {
 func (jc *JointCache) Pop() (jw JointWrap, ok bool) {
 	jc.mux.Lock()
 	defer jc.mux.Unlock()
+
 	var l = len(jc.cache)
 	if l > 0 {
 		jc.expire[0].Stop()
 		copy(jc.expire, jc.expire[1:])
 		jc.expire = jc.expire[:l-1]
-		jw = jc.cache[0]
+		jw.Joint = jc.cache[0]
+		jw.jc = jc // ensure that jc is owned while jw is outside of cache
 		copy(jc.cache, jc.cache[1:])
 		jc.cache = jc.cache[:l-1]
 		ok = true
@@ -203,30 +182,55 @@ func (jc *JointCache) Pop() (jw JointWrap, ok bool) {
 func (jc *JointCache) Get() (jw JointWrap, err error) {
 	jw, ok := jc.Pop()
 	if !ok {
-		var j Joint
-		if j, err = MakeJoint(jc.key); err != nil {
+		if jw.Joint, err = MakeJoint(jc.key); err != nil {
 			return
 		}
-		jw = JointWrap{jc, j}
+		jw.jc = jc // ensure that jc is owned while jw is outside of cache
 	}
 	return
 }
 
 // Put disk joint to cache.
 func (jc *JointCache) Put(j Joint) {
-	var jw, ok = j.(JointWrap) // get wrapper if it has
-	if !ok {
-		jw.Joint = j
+	if jw, ok := j.(JointWrap); ok {
+		j = jw.Joint
 	}
-	jw.jc = jc // ensure that jc is owned in all cases
+
 	jc.mux.Lock()
 	defer jc.mux.Unlock()
-	jc.cache = append(jc.cache, jw)
+
+	for _, f := range jc.cache { // ensure that joint does not present
+		if f == j {
+			return
+		}
+	}
+
+	jc.cache = append(jc.cache, j)
 	jc.expire = append(jc.expire, time.AfterFunc(Cfg.DiskCacheExpire, func() {
-		if j, ok := jc.Pop(); ok {
-			j.Cleanup()
+		if jw, ok := jc.Pop(); ok {
+			jw.Joint.Cleanup()
 		}
 	}))
+}
+
+// Eject joint from the cache.
+func (jc *JointCache) Eject(j Joint) bool {
+	if jw, ok := j.(JointWrap); ok {
+		j = jw.Joint
+	}
+
+	jc.mux.Lock()
+	defer jc.mux.Unlock()
+
+	for i, f := range jc.cache {
+		if f == j {
+			jc.expire[i].Stop()
+			jc.expire = append(jc.expire[:i], jc.expire[i+1:]...)
+			jc.cache = append(jc.cache[:i], jc.cache[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 // The End.
