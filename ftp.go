@@ -113,7 +113,7 @@ func (j *FtpJoint) Close() (err error) {
 	return
 }
 
-func (j *FtpJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
+func (j *FtpJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
 	if j.entries == nil {
 		var fpath = FtpEscapeBrackets(j.path)
 		if j.entries, err = j.conn.List(fpath); err != nil {
@@ -134,30 +134,28 @@ func (j *FtpJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	if n <= 0 { // on case all files readed or some deleted
 		return
 	}
-	ret = make([]fs.DirEntry, n)
+	list = make([]fs.DirEntry, n)
 	for i := 0; i < n; i++ {
-		ret[i] = fs.FileInfoToDirEntry(FtpFileInfo{j.entries[j.rdn+i]})
+		list[i] = FtpFileInfo{j.entries[j.rdn+i]}
 	}
 	j.rdn += n
 	return
 }
 
-func (j *FtpJoint) Stat() (fi fs.FileInfo, err error) {
-	var ent *ftp.Entry
-	if ent, err = j.conn.GetEntry(j.path); err != nil {
-		return
+func (j *FtpJoint) Stat() (fs.FileInfo, error) {
+	var ent, err = j.conn.GetEntry(j.path)
+	if err != nil {
+		return nil, err
 	}
-	fi = FtpFileInfo{ent}
-	return
+	return FtpFileInfo{ent}, nil
 }
 
-func (j *FtpJoint) Info(fpath string) (fi fs.FileInfo, err error) {
-	var ent *ftp.Entry
-	if ent, err = j.conn.GetEntry(fpath); err != nil {
-		return
+func (j *FtpJoint) Info(fpath string) (fs.FileInfo, error) {
+	var ent, err = j.conn.GetEntry(fpath)
+	if err != nil {
+		return nil, err
 	}
-	fi = FtpFileInfo{ent}
-	return
+	return FtpFileInfo{ent}, nil
 }
 
 func (j *FtpJoint) Size() int64 {
@@ -258,15 +256,18 @@ func (fi FtpFileInfo) Size() int64 {
 
 // fs.FileInfo implementation.
 func (fi FtpFileInfo) Mode() fs.FileMode {
-	switch fi.Type {
+	var mode fs.FileMode = 0444
+	switch fi.Entry.Type {
 	case ftp.EntryTypeFile:
-		return 0444
+		if IsTypeIso(fi.Entry.Name) {
+			mode |= fs.ModeDir
+		}
 	case ftp.EntryTypeFolder:
-		return fs.ModeDir
+		mode = fs.ModeDir
 	case ftp.EntryTypeLink:
-		return fs.ModeSymlink
+		mode = fs.ModeSymlink
 	}
-	return 0
+	return mode
 }
 
 // fs.FileInfo implementation.
@@ -276,12 +277,29 @@ func (fi FtpFileInfo) ModTime() time.Time {
 
 // fs.FileInfo implementation.
 func (fi FtpFileInfo) IsDir() bool {
+	return fi.Entry.Type == ftp.EntryTypeFolder || IsTypeIso(fi.Entry.Name)
+}
+
+func (fi FtpFileInfo) IsRealDir() bool {
 	return fi.Entry.Type == ftp.EntryTypeFolder
+}
+
+func (fi FtpFileInfo) Type() fs.FileMode {
+	return fi.Mode().Type()
+}
+
+// Info provided for fs.DirEntry compatibility and returns object itself.
+func (fi FtpFileInfo) Info() (fs.FileInfo, error) {
+	return fi, nil
 }
 
 // fs.FileInfo implementation. Returns structure pointer itself.
 func (fi FtpFileInfo) Sys() interface{} {
 	return fi
+}
+
+func (fi FtpFileInfo) String() string {
+	return fs.FormatDirEntry(fi)
 }
 
 // The End.

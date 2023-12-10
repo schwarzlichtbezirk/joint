@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"sort"
 	"sync"
 	"time"
 )
@@ -16,6 +17,14 @@ type RFile interface {
 	fs.File
 }
 
+// FileInfo inherits fs.FileInfo and provide IsDir that returns
+// true for ISO-disk files. Has IsRealDir that provide value
+// from inherited fs.FileInfo.
+type FileInfo interface {
+	fs.FileInfo
+	IsRealDir() bool // returns real file state representation
+}
+
 // Joint describes interface with joint to some file system provider.
 type Joint interface {
 	Make(Joint, string) error // establish connection to file system provider
@@ -23,11 +32,64 @@ type Joint interface {
 	Busy() bool               // file is opened
 	fs.FS                     // open file with local file path
 	io.Closer                 // close local file
+	Size() int64              // helps to make io.SectionReader
 	fs.ReadDirFile            // read directory pointed by local file path
 	RFile
 }
 
+type fileinfo struct {
+	fs.FileInfo
+}
+
+func (fi fileinfo) Mode() fs.FileMode {
+	var mode = fi.FileInfo.Mode()
+	if mode.IsRegular() && IsTypeIso(fi.FileInfo.Name()) {
+		mode |= fs.ModeDir
+	}
+	return mode
+}
+
+func (fi fileinfo) IsDir() bool {
+	return fi.FileInfo.IsDir() || IsTypeIso(fi.FileInfo.Name())
+}
+
+func (fi fileinfo) IsRealDir() bool {
+	return fi.FileInfo.IsDir()
+}
+
+func (fi fileinfo) Type() fs.FileMode {
+	return fi.FileInfo.Mode().Type()
+}
+
+// Info provided for fs.DirEntry compatibility and returns object itself.
+func (fi fileinfo) Info() (fs.FileInfo, error) {
+	return fi, nil
+}
+
+func (fi fileinfo) String() string {
+	return fs.FormatDirEntry(fi)
+}
+
+// ToFileInfo converts base fs.FileInfo to FileInfo that compatible both
+// with fs.FileInfo and with fs.DirEntry interface and have derived IsDir.
+func ToFileInfo(fi fs.FileInfo) FileInfo {
+	if fi == nil {
+		return nil
+	}
+	return fileinfo{fi}
+}
+
+// ToDirEntry returns FileInfo that compatible with fs.DirEntry interface,
+// and have derived IsDir.
+func ToDirEntry(fi fs.FileInfo) fs.DirEntry {
+	if fi == nil {
+		return nil
+	}
+	return fileinfo{fi}
+}
+
 // JointWrap helps to return joint into cache after Close-call.
+// It has pointer to JointCache that it binded to.
 type JointWrap struct {
 	jc *JointCache
 	Joint
@@ -38,6 +100,7 @@ func (jw JointWrap) GetCache() *JointCache {
 	return jw.jc
 }
 
+// Close calls inherited Close-function and puts joint into binded cache.
 func (jw JointWrap) Close() error {
 	var err = jw.Joint.Close()
 	if jw.jc != nil {
@@ -53,6 +116,7 @@ type Config struct {
 	DiskCacheExpire time.Duration `json:"disk-cache-expire" yaml:"disk-cache-expire" xml:"disk-cache-expire"`
 }
 
+// Cfg is singleton with timeouts settings for all joints.
 var Cfg = Config{
 	DialTimeout:     5 * time.Second,
 	DiskCacheExpire: 2 * time.Minute,
@@ -72,12 +136,16 @@ func NewJointCache(key string) *JointCache {
 	}
 }
 
+// Key is the base address or path for cache file system.
 func (jc *JointCache) Key() string {
 	return jc.key
 }
 
 // Open implements fs.FS interface,
 // and returns file that can be casted to joint wrapper.
+// Note that internal ISO-files are considered as directories and it should
+// be provided another JointCache to work with their file system.
+// Use JointPool on this case.
 func (jc *JointCache) Open(fpath string) (f fs.File, err error) {
 	var jw JointWrap
 	if jw, err = jc.Get(); err != nil {
@@ -107,14 +175,16 @@ func (jc *JointCache) Stat(fpath string) (fi fs.FileInfo, err error) {
 }
 
 // ReadDir implements fs.ReadDirFS interface.
-func (jc *JointCache) ReadDir(fpath string) (des []fs.DirEntry, err error) {
+func (jc *JointCache) ReadDir(fpath string) (list []fs.DirEntry, err error) {
 	var f fs.File
 	if f, err = jc.Open(fpath); err != nil {
 		return
 	}
 	defer f.Close()
 
-	return f.(Joint).ReadDir(-1)
+	list, err = f.(Joint).ReadDir(-1)
+	sort.Slice(list, func(i, j int) bool { return list[i].Name() < list[j].Name() })
+	return
 }
 
 // Count is number of free joints in cache for one key path.
@@ -145,7 +215,7 @@ func (jc *JointCache) Close() (err error) {
 // Checks whether it is contained joint in cache.
 func (jc *JointCache) Has(j Joint) bool {
 	if jw, ok := j.(JointWrap); ok {
-		j = jw.Joint
+		j = jw.Joint // strip wrapper to avoid overlapping
 	}
 
 	jc.mux.Lock()
@@ -193,7 +263,7 @@ func (jc *JointCache) Get() (jw JointWrap, err error) {
 // Put disk joint to cache.
 func (jc *JointCache) Put(j Joint) {
 	if jw, ok := j.(JointWrap); ok {
-		j = jw.Joint
+		j = jw.Joint // strip wrapper to avoid overlapping
 	}
 
 	jc.mux.Lock()
@@ -216,7 +286,7 @@ func (jc *JointCache) Put(j Joint) {
 // Eject joint from the cache.
 func (jc *JointCache) Eject(j Joint) bool {
 	if jw, ok := j.(JointWrap); ok {
-		j = jw.Joint
+		j = jw.Joint // strip wrapper to avoid overlapping
 	}
 
 	jc.mux.Lock()

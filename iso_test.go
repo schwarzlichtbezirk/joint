@@ -11,7 +11,7 @@ import (
 	jnt "github.com/schwarzlichtbezirk/joint"
 )
 
-// precalculated CRC32 codes with IEEE polynomial of files in ISO-images.
+// Precalculated CRC32 codes with IEEE polynomial of files in ISO-images.
 var filecrc = map[string]uint32{
 	"fox.txt":      0x519025e9,
 	"doc1.txt":     0x98b2c5bd,
@@ -23,6 +23,46 @@ var filecrc = map[string]uint32{
 	"док1.txt":     0x3d4fdf17, // cyrillic name
 	"док2.txt":     0x42d2236a, // cyrillic name
 	"internal.iso": 0xf4c1b74d,
+}
+
+// Files list in external ISO-disk.
+var extfiles = []string{
+	"fox.txt",
+	"data/lorem1.txt",
+	"data/lorem2.txt",
+	"data/lorem3.txt",
+	"data/рыба.txt",
+	"data/docs/doc1.txt",
+	"data/docs/doc2.txt",
+	"data/доки/док1.txt",
+	"data/доки/док2.txt",
+	//"disk/internal.iso", // its a directory!
+}
+
+// Files list in internal ISO-disk.
+var intfiles = []string{
+	"fox.txt",
+	"docs/doc1.txt",
+	"docs/doc2.txt",
+	"доки/док1.txt",
+	"доки/док2.txt",
+}
+
+// Directories list in external ISO-disk.
+var extdirs = map[string][]string{
+	"":           {"fox.txt", "data", "disk"},
+	"data":       {"lorem1.txt", "lorem2.txt", "lorem3.txt", "рыба.txt", "docs", "доки", "empty"},
+	"disk":       {"internal.iso"},
+	"data/docs":  {"doc1.txt", "doc2.txt"},
+	"data/доки":  {"док1.txt", "док2.txt"},
+	"data/empty": {},
+}
+
+// Directories list in internal ISO-disk.
+var intdirs = map[string][]string{
+	"":     {"fox.txt", "docs", "доки"},
+	"docs": {"doc1.txt", "doc2.txt"},
+	"доки": {"док1.txt", "док2.txt"},
 }
 
 func checkFile(j jnt.Joint, fpath string) (err error) {
@@ -159,19 +199,7 @@ func TestExtReadFile(t *testing.T) {
 	}
 	defer j.Cleanup()
 
-	var files = []string{
-		"fox.txt",
-		"data/lorem1.txt",
-		"data/lorem2.txt",
-		"data/lorem3.txt",
-		"data/рыба.txt",
-		"data/docs/doc1.txt",
-		"data/docs/doc2.txt",
-		"data/доки/док1.txt",
-		"data/доки/док2.txt",
-		"disk/internal.iso",
-	}
-	for _, fpath := range files {
+	for _, fpath := range extfiles {
 		if err = checkFile(j, fpath); err != nil {
 			t.Fatal(err)
 		}
@@ -193,14 +221,7 @@ func TestIntReadFile(t *testing.T) {
 	}
 	defer j2.Cleanup() // only top-level joint must be called for Cleanup
 
-	var files = []string{
-		"fox.txt",
-		"docs/doc1.txt",
-		"docs/doc2.txt",
-		"доки/док1.txt",
-		"доки/док2.txt",
-	}
-	for _, fpath := range files {
+	for _, fpath := range intfiles {
 		if err = checkFile(j2, fpath); err != nil {
 			t.Fatal(err)
 		}
@@ -217,16 +238,8 @@ func TestExtDirList(t *testing.T) {
 	}
 	defer j.Cleanup()
 
-	var dirs = map[string][]string{
-		"":           {"fox.txt", "data", "disk"},
-		"data":       {"lorem1.txt", "lorem2.txt", "lorem3.txt", "рыба.txt", "docs", "доки", "empty"},
-		"disk":       {"internal.iso"},
-		"data/docs":  {"doc1.txt", "doc2.txt"},
-		"data/доки":  {"док1.txt", "док2.txt"},
-		"data/empty": {},
-	}
-	for fpath := range dirs {
-		if err = checkDir(j, fpath, dirs); err != nil {
+	for fpath := range extdirs {
+		if err = checkDir(j, fpath, extdirs); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -247,13 +260,8 @@ func TestIntDirList(t *testing.T) {
 	}
 	defer j2.Cleanup() // only top-level joint must be called for Cleanup
 
-	var dirs = map[string][]string{
-		"":     {"fox.txt", "docs", "доки"},
-		"docs": {"doc1.txt", "doc2.txt"},
-		"доки": {"док1.txt", "док2.txt"},
-	}
-	for fpath := range dirs {
-		if err = checkDir(j2, fpath, dirs); err != nil {
+	for fpath := range intdirs {
+		if err = checkDir(j2, fpath, intdirs); err != nil {
 			t.Fatal(err)
 		}
 	}

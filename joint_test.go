@@ -3,9 +3,19 @@ package joint_test
 import (
 	"io/fs"
 	"testing"
+	"testing/fstest"
 
 	jnt "github.com/schwarzlichtbezirk/joint"
 )
+
+// Files list to test joints cache.
+var jcfiles = []string{
+	"fox.txt",
+	"data/lorem1.txt",
+	"data/рыба.txt",
+	"data/docs/doc1.txt",
+	"data/доки/док2.txt",
+}
 
 // Test how JointWrapper is work.
 func TestWrapper(t *testing.T) {
@@ -118,19 +128,12 @@ func TestCacheOpen(t *testing.T) {
 	var jc = jnt.NewJointCache("testdata/external.iso")
 	defer jc.Close()
 
-	var list = []string{
-		"fox.txt",
-		"data/lorem1.txt",
-		"data/lorem2.txt",
-		"data/lorem3.txt",
-		"data/рыба.txt",
-	}
-	var files = make([]fs.File, len(list))
+	var files = make([]fs.File, len(jcfiles))
 	if jc.Count() != 0 {
 		t.Fatalf("expected %d joints in cache, got %d", 0, jc.Count())
 	}
 	// open several files at once
-	for i, fpath := range list {
+	for i, fpath := range jcfiles {
 		if files[i], err = jc.Open(fpath); err != nil {
 			t.Fatal(err)
 		}
@@ -145,21 +148,35 @@ func TestCacheOpen(t *testing.T) {
 		}
 	}
 	// all joints of those files should be in cache
-	if jc.Count() != len(list) {
-		t.Fatalf("expected %d joints in cache, got %d", len(list), jc.Count())
+	if jc.Count() != len(jcfiles) {
+		t.Fatalf("expected %d joints in cache, got %d", len(jcfiles), jc.Count())
 	}
 	// open some file again
 	var f fs.File
-	if f, err = jc.Open(list[0]); err != nil {
+	if f, err = jc.Open(jcfiles[0]); err != nil {
 		t.Fatal(err)
 	}
 	// joint for this file should been taken from cache
-	if jc.Count() != len(list)-1 {
-		t.Fatalf("expected %d joints in cache, got %d", len(list)-1, jc.Count())
+	if jc.Count() != len(jcfiles)-1 {
+		t.Fatalf("expected %d joints in cache, got %d", len(jcfiles)-1, jc.Count())
 	}
 	f.Close()
 	// cache should be restored
-	if jc.Count() != len(list) {
-		t.Fatalf("expected %d joints in cache, got %d", len(list), jc.Count())
+	if jc.Count() != len(jcfiles) {
+		t.Fatalf("expected %d joints in cache, got %d", len(jcfiles), jc.Count())
+	}
+}
+
+// Note that JointCache file system has undefined behaviour
+// for internal ISO-files.
+func TestCacheFS(t *testing.T) {
+	var err error
+
+	var jc = jnt.NewJointCache("testdata/external.iso/disk/internal.iso")
+	defer jc.Close()
+
+	// test FS at the end
+	if err = fstest.TestFS(jc, intfiles...); err != nil {
+		t.Fatal(err)
 	}
 }

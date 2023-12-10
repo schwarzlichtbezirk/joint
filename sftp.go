@@ -117,7 +117,15 @@ func (j *SftpJoint) Close() (err error) {
 	return
 }
 
-func (j *SftpJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
+func (j *SftpJoint) Size() int64 {
+	var fi, err = j.File.Stat()
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
+}
+
+func (j *SftpJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
 	if j.files == nil {
 		if j.files, err = j.client.ReadDir(JoinFast(j.pwd, j.path)); err != nil {
 			return
@@ -133,16 +141,22 @@ func (j *SftpJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	if n <= 0 { // on case all files readed or some deleted
 		return
 	}
-	ret = make([]fs.DirEntry, n)
+	list = make([]fs.DirEntry, n)
 	for i := 0; i < n; i++ {
-		ret[i] = fs.FileInfoToDirEntry(j.files[j.rdn+i])
+		list[i] = ToDirEntry(j.files[j.rdn+i])
 	}
 	j.rdn += n
 	return
 }
 
+func (j *SftpJoint) Stat() (fs.FileInfo, error) {
+	var fi, err = j.File.Stat()
+	return ToFileInfo(fi), err
+}
+
 func (j *SftpJoint) Info(fpath string) (fs.FileInfo, error) {
-	return j.client.Stat(JoinFast(j.pwd, fpath))
+	var fi, err = j.client.Stat(JoinFast(j.pwd, fpath))
+	return ToFileInfo(fi), err
 }
 
 // The End.

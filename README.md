@@ -1,6 +1,6 @@
 # Joint
 
-Provides single interface to get access to files in ISO-9660 images, FTP-servers, SFTP-servers, WebDAV-servers. Contains cache with reusable connections to endpoints.
+Provides access to files in ISO-9660 images, FTP-servers, SFTP-servers, WebDAV-servers by standard file system interfaces. Contains cache with reusable connections to endpoints.
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/schwarzlichtbezirk/joint.svg)](https://pkg.go.dev/github.com/schwarzlichtbezirk/joint)
 [![Go Report Card](https://goreportcard.com/badge/github.com/schwarzlichtbezirk/joint)](https://goreportcard.com/report/github.com/schwarzlichtbezirk/joint)
@@ -28,6 +28,7 @@ import (
 // to get a list of files in WebDAV-server for given user.
 func main() {
     var jc = jnt.NewJointCache("https://music:x@192.168.1.1/webdav/")
+    defer jc.Close()
     http.Handle("/", http.FileServer(http.FS(jc)))
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
@@ -50,6 +51,7 @@ import (
 func main() {
     // create map with caches for all currently unused joints
     var jp = jnt.NewJointPool()
+    defer jp.Close()
     // file system, that shares content of "testdata" folder
     // and all embedded into ISO-disks files
     var sp, err = jp.Sub("testdata")
@@ -82,6 +84,7 @@ var jp = jnt.NewJointPool()
 func main() {
     // create map with caches for all currently unused joints
     var jp = jnt.NewJointPool()
+    defer jp.Close()
     // handle list of resources as binded file systems
     http.Handle("/iso/", http.StripPrefix("/iso/", http.FileServer(
         http.FS(jnt.NewSubPool(jp, "testdata/external.iso")))))

@@ -3,6 +3,7 @@ package joint
 import (
 	"errors"
 	"io/fs"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -136,7 +137,7 @@ func SplitKey(fullpath string) (key, fpath string) {
 }
 
 // JointPool is map with joint caches.
-// Each key in map is path to file system resource,
+// Each key in map is address or path to file system resource,
 // value - cached for this resource list of joints.
 type JointPool struct {
 	jpmap map[string]*JointCache
@@ -232,25 +233,32 @@ func (jp *JointPool) Stat(fullpath string) (fi fs.FileInfo, err error) {
 
 // ReadDir returns directory files fs.DirEntry list pointed by given full path.
 // ReadDir implements ReadDirFS interface.
-func (jp *JointPool) ReadDir(fullpath string) (ret []fs.DirEntry, err error) {
+func (jp *JointPool) ReadDir(fullpath string) (list []fs.DirEntry, err error) {
 	var f fs.File
 	if f, err = jp.Open(fullpath); err != nil {
 		return
 	}
 	defer f.Close()
-	var j = f.(Joint)
-	return j.ReadDir(-1)
+
+	list, err = f.(Joint).ReadDir(-1)
+	sort.Slice(list, func(i, j int) bool { return list[i].Name() < list[j].Name() })
+	return
 }
 
 // Sub returns new file subsystem with given absolute root directory.
+// Performs given directory check up.
 // Sub implements fs.SubFS interface,
 // and returns object that can be casted to *SubPool.
 func (jp *JointPool) Sub(dir string) (fs.FS, error) {
+	if !fs.ValidPath(dir) || dir == "" || dir == "." {
+		return nil, fs.ErrInvalid
+	}
 	var fi, err = jp.Stat(dir)
 	if err != nil {
 		return nil, err
 	}
-	if !fi.IsDir() && IsTypeIso(dir) {
+	var jfi = fi.(FileInfo)
+	if jfi.IsRealDir() && IsTypeIso(dir) {
 		return nil, fs.ErrNotExist
 	}
 	return &SubPool{
@@ -281,33 +289,56 @@ func (sp *SubPool) Dir() string {
 
 // Open implements fs.FS interface,
 // and returns file that can be casted to joint wrapper.
-func (sp *SubPool) Open(fullpath string) (f fs.File, err error) {
-	fullpath = JoinFast(sp.dir, fullpath)
+func (sp *SubPool) Open(fpath string) (f fs.File, err error) {
+	if !fs.ValidPath(fpath) {
+		return nil, fs.ErrInvalid
+	}
+	var fullpath = sp.dir
+	if fpath != "" && fpath != "." {
+		fullpath += "/" + fpath
+	}
 	return sp.JointPool.Open(fullpath)
 }
 
 // Stat implements fs.StatFS interface.
-func (sp *SubPool) Stat(fullpath string) (fi fs.FileInfo, err error) {
-	fullpath = JoinFast(sp.dir, fullpath)
+func (sp *SubPool) Stat(fpath string) (fi fs.FileInfo, err error) {
+	if !fs.ValidPath(fpath) {
+		return nil, fs.ErrInvalid
+	}
+	var fullpath = sp.dir
+	if fpath != "" && fpath != "." {
+		fullpath += "/" + fpath
+	}
 	return sp.JointPool.Stat(fullpath)
 }
 
 // ReadDir implements ReadDirFS interface.
-func (sp *SubPool) ReadDir(fullpath string) (ret []fs.DirEntry, err error) {
-	fullpath = JoinFast(sp.dir, fullpath)
+func (sp *SubPool) ReadDir(fpath string) (ret []fs.DirEntry, err error) {
+	if !fs.ValidPath(fpath) {
+		return nil, fs.ErrInvalid
+	}
+	var fullpath = sp.dir
+	if fpath != "" && fpath != "." {
+		fullpath += "/" + fpath
+	}
 	return sp.JointPool.ReadDir(fullpath)
 }
 
 // Sub returns new file subsystem with given relative root directory.
+// Performs given directory check up.
 // Sub implements fs.SubFS interface,
 // and returns object that can be casted to *SubPool.
 func (sp *SubPool) Sub(dir string) (fs.FS, error) {
+	if !fs.ValidPath(dir) {
+		return nil, fs.ErrInvalid
+	}
 	dir = JoinFast(sp.dir, dir)
 	var fi, err = sp.JointPool.Stat(dir)
 	if err != nil {
 		return nil, err
 	}
-	if !fi.IsDir() && IsTypeIso(dir) {
+	var jfi = fi.(FileInfo)
+	if jfi.IsRealDir() && IsTypeIso(dir) {
 		return nil, fs.ErrNotExist
 	}
 	return &SubPool{

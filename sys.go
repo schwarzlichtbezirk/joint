@@ -1,6 +1,7 @@
 package joint
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 )
@@ -46,8 +47,39 @@ func (j *SysJoint) Close() (err error) {
 	return
 }
 
+func (j *SysJoint) Size() int64 {
+	var fi, err = j.File.Stat()
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
+}
+
+func (j *SysJoint) ReadDir(n int) ([]fs.DirEntry, error) {
+	var errs []error
+	var list, err = j.File.ReadDir(n)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	for i, de := range list {
+		var fi, err = de.Info()
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		list[i] = ToDirEntry(fi)
+	}
+	return list, errors.Join(errs...)
+}
+
+func (j *SysJoint) Stat() (fs.FileInfo, error) {
+	var fi, err = j.File.Stat()
+	return ToFileInfo(fi), err
+}
+
 func (j *SysJoint) Info(fpath string) (fs.FileInfo, error) {
-	return os.Stat(JoinFast(j.dir, fpath))
+	var fi, err = os.Stat(JoinFast(j.dir, fpath))
+	return ToFileInfo(fi), err
 }
 
 // The End.

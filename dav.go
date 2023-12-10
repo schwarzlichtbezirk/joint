@@ -105,7 +105,15 @@ func (j *DavJoint) Close() (err error) {
 	return
 }
 
-func (j *DavJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
+func (j *DavJoint) Size() int64 {
+	var fi, err = j.client.Stat(j.path)
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
+}
+
+func (j *DavJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
 	if j.files == nil {
 		if j.files, err = j.client.ReadDir(j.path); err != nil {
 			return
@@ -121,9 +129,9 @@ func (j *DavJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	if n <= 0 { // on case all files readed or some deleted
 		return
 	}
-	ret = make([]fs.DirEntry, n)
+	list = make([]fs.DirEntry, n)
 	for i := 0; i < n; i++ {
-		ret[i] = fs.FileInfoToDirEntry(j.files[j.rdn+i])
+		list[i] = ToDirEntry(j.files[j.rdn+i])
 	}
 	j.rdn += n
 	return
@@ -184,13 +192,14 @@ func (j *DavJoint) ReadAt(b []byte, off int64) (n int, err error) {
 	return j.Read(b)
 }
 
-func (j *DavJoint) Stat() (fi fs.FileInfo, err error) {
-	fi, err = j.client.Stat(j.path)
-	return
+func (j *DavJoint) Stat() (fs.FileInfo, error) {
+	var fi, err = j.client.Stat(j.path)
+	return ToFileInfo(fi), err
 }
 
-func (j *DavJoint) Info(fpath string) (fi fs.FileInfo, err error) {
-	return j.client.Stat(fpath)
+func (j *DavJoint) Info(fpath string) (fs.FileInfo, error) {
+	var fi, err = j.client.Stat(fpath)
+	return ToFileInfo(fi), err
 }
 
 // The End.

@@ -57,10 +57,15 @@ func (j *IsoJoint) Open(fpath string) (file fs.File, err error) {
 	if j.Busy() {
 		return nil, fs.ErrExist
 	}
+	if fpath == "." { // dot folder does not accepted
+		fpath = ""
+	}
 	if j.File, err = j.OpenFile(fpath); err != nil {
 		return
 	}
-	if sr := j.File.Reader(); sr != nil {
+	if fpath == "" { // open base ISO-disk to read
+		j.SectionReader = io.NewSectionReader(j.Base, 0, j.Base.Size())
+	} else if sr := j.File.Reader(); sr != nil {
 		j.SectionReader = sr.(*io.SectionReader)
 	}
 	j.rdn = 0 // start new sequence
@@ -74,9 +79,6 @@ func (j *IsoJoint) Close() error {
 }
 
 func (j *IsoJoint) OpenFile(fpath string) (*iso.File, error) {
-	if fpath == "." { // dot folder does not accepted
-		fpath = ""
-	}
 	if file, ok := j.cache[fpath]; ok {
 		return file, nil
 	}
@@ -118,7 +120,12 @@ func (j *IsoJoint) OpenFile(fpath string) (*iso.File, error) {
 	return file, nil
 }
 
-func (j *IsoJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
+// Size of file. Resolve duality between File.Size() and SectionReader.Size().
+func (j *IsoJoint) Size() int64 {
+	return j.File.Size()
+}
+
+func (j *IsoJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
 	var files []*iso.File // children entries cached by previous calls
 	if files, err = j.File.GetChildren(); err != nil {
 		return
@@ -133,29 +140,27 @@ func (j *IsoJoint) ReadDir(n int) (ret []fs.DirEntry, err error) {
 	if n <= 0 { // on case all files readed or some deleted
 		return
 	}
-	ret = make([]fs.DirEntry, n)
+	list = make([]fs.DirEntry, n)
 	for i := 0; i < n; i++ {
-		ret[i] = fs.FileInfoToDirEntry(IsoFileInfo{
-			File: files[j.rdn+i],
-		})
+		list[i] = IsoFileInfo{files[j.rdn+i]}
 	}
 	j.rdn += n
 	return
 }
 
 func (j *IsoJoint) Stat() (fs.FileInfo, error) {
+	if j.File.IsDir() && j.SectionReader != nil { // base ISO-disk
+		return j.Base.Stat()
+	}
 	return IsoFileInfo{j.File}, nil
 }
 
-func (j *IsoJoint) Info(fpath string) (fi fs.FileInfo, err error) {
-	var file *iso.File
-	if file, err = j.OpenFile(fpath); err != nil {
-		return
+func (j *IsoJoint) Info(fpath string) (fs.FileInfo, error) {
+	var file, err = j.OpenFile(fpath)
+	if err != nil {
+		return nil, err
 	}
-	fi = IsoFileInfo{
-		File: file,
-	}
-	return
+	return IsoFileInfo{file}, nil
 }
 
 type IsoFileInfo struct {
@@ -168,8 +173,37 @@ func (fi IsoFileInfo) Name() string {
 	return name
 }
 
+func (fi IsoFileInfo) Mode() fs.FileMode {
+	var mode = fi.File.Mode()
+	if mode.IsRegular() && IsTypeIso(fi.File.Name()) {
+		mode |= fs.ModeDir
+	}
+	return mode
+}
+
+func (fi IsoFileInfo) IsDir() bool {
+	return fi.File.IsDir() || IsTypeIso(fi.File.Name())
+}
+
+func (fi IsoFileInfo) IsRealDir() bool {
+	return fi.File.IsDir()
+}
+
+func (fi IsoFileInfo) Type() fs.FileMode {
+	return fi.Mode().Type()
+}
+
+// Info provided for fs.DirEntry compatibility and returns object itself.
+func (fi IsoFileInfo) Info() (fs.FileInfo, error) {
+	return fi, nil
+}
+
 func (fi IsoFileInfo) Sys() interface{} {
 	return fi
+}
+
+func (fi IsoFileInfo) String() string {
+	return fs.FormatDirEntry(fi)
 }
 
 // The End.
