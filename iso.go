@@ -94,7 +94,7 @@ func (j *IsoJoint) OpenFile(fpath string) (*iso.File, error) {
 		if !file.IsDir() {
 			return nil, fs.ErrNotExist
 		}
-		var curpath = JoinFast(curdir, chunk)
+		var curpath = JoinPath(curdir, chunk)
 		if f, ok := j.cache[curpath]; ok {
 			file = f // the file must be unchanged otherwise
 		} else {
@@ -105,7 +105,7 @@ func (j *IsoJoint) OpenFile(fpath string) (*iso.File, error) {
 			var found = false
 			for _, file = range list {
 				var name, _ = dec.String(file.Name())
-				j.cache[JoinFast(curdir, name)] = file
+				j.cache[JoinPath(curdir, name)] = file
 				if name == chunk {
 					found = true
 					break
@@ -167,6 +167,7 @@ type IsoFileInfo struct {
 	*iso.File
 }
 
+// Name returns filename translated from cyrillic to unicode.
 func (fi IsoFileInfo) Name() string {
 	var dec = charmap.Windows1251.NewDecoder()
 	var name, _ = dec.String(fi.File.Name())
@@ -198,6 +199,7 @@ func (fi IsoFileInfo) Info() (fs.FileInfo, error) {
 	return fi, nil
 }
 
+// Sys returns IsoFileInfo itself.
 func (fi IsoFileInfo) Sys() interface{} {
 	return fi
 }

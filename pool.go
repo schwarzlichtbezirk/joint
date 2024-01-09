@@ -3,13 +3,14 @@ package joint
 import (
 	"errors"
 	"io/fs"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 )
 
-// JoinFast performs fast join of two path chunks.
-func JoinFast(dir, base string) string {
+// JoinPath performs fast join of two path chunks.
+func JoinPath(dir, base string) string {
 	if dir == "" || dir == "." {
 		return base
 	}
@@ -42,41 +43,38 @@ func IsTypeIso(fpath string) bool {
 // Please note that folders with .iso extension and non ISO-images
 // with .iso extension will cause an error.
 func MakeJoint(fullpath string) (j Joint, err error) {
-	var localpath string
+	var addr, fpath = SplitUrl(fullpath)
 	if strings.HasPrefix(fullpath, "ftp://") {
-		var addr string
-		addr, localpath = SplitUrl(fullpath)
 		j = &FtpJoint{}
 		if err = j.Make(nil, addr); err != nil {
 			return
 		}
 	} else if strings.HasPrefix(fullpath, "sftp://") {
-		var addr string
-		addr, localpath = SplitUrl(fullpath)
 		j = &SftpJoint{}
 		if err = j.Make(nil, addr); err != nil {
 			return
 		}
 	} else if strings.HasPrefix(fullpath, "http://") || strings.HasPrefix(fullpath, "https://") {
-		var addr string
-		var ok bool
-		if addr, localpath, ok = GetDavPath(fullpath); !ok {
+		var root, ok = GetDavRoot(addr, fpath)
+		if !ok {
 			err = fs.ErrNotExist
 			return
 		}
+		fpath = fpath[len(root)-1:]
 		j = &DavJoint{}
-		if err = j.Make(nil, addr); err != nil {
+		if err = j.Make(nil, addr+root); err != nil {
 			return
 		}
 	} else {
-		localpath = fullpath
-		j = &SysJoint{}
+		j = &SysJoint{
+			dir: addr,
+		}
 	}
 
 	var jpos = 0
 	for {
-		var p1 = strings.Index(localpath[jpos:], ".iso/")
-		var p2 = strings.Index(localpath[jpos:], ".ISO/")
+		var p1 = strings.Index(fpath[jpos:], ".iso/")
+		var p2 = strings.Index(fpath[jpos:], ".ISO/")
 		if p1 == p2 { // p1 == -1 && p2 == -1
 			break
 		}
@@ -88,15 +86,15 @@ func MakeJoint(fullpath string) (j Joint, err error) {
 		} else {
 			p = min(p1, p2)
 		}
-		var key = localpath[:p+4]
+		var key = fpath[:p+4]
 		var jiso = &IsoJoint{}
 		if err = jiso.Make(j, key); err != nil {
 			return
 		}
 		j, jpos = jiso, p+5
 	}
-	if IsTypeIso(localpath[jpos:]) {
-		var key = localpath[jpos:]
+	if IsTypeIso(fpath[jpos:]) {
+		var key = fpath[jpos:]
 		var jiso = &IsoJoint{}
 		if err = jiso.Make(j, key); err != nil {
 			return
@@ -107,12 +105,19 @@ func MakeJoint(fullpath string) (j Joint, err error) {
 }
 
 // SplitUrl splits URL to address string and to path as is.
+// For file path it splits to volume name and path at this volume.
 func SplitUrl(urlpath string) (string, string) {
 	if i := strings.Index(urlpath, "://"); i != -1 {
 		if j := strings.Index(urlpath[i+3:], "/"); j != -1 {
 			return urlpath[:i+3+j], urlpath[i+3+j+1:]
 		}
 		return urlpath, ""
+	}
+	if vol := filepath.VolumeName(urlpath); len(vol) > 0 {
+		if len(urlpath) > len(vol)+1 {
+			return vol, urlpath[len(vol)+1:]
+		}
+		return vol, ""
 	}
 	return "", urlpath
 }
@@ -129,11 +134,13 @@ func SplitKey(fullpath string) (key, fpath string) {
 	if p != -1 {
 		return fullpath[:p+4], fullpath[p+5:]
 	}
+	key, fpath = SplitUrl(fullpath)
 	if strings.HasPrefix(fullpath, "http://") || strings.HasPrefix(fullpath, "https://") {
-		key, fpath, _ = GetDavPath(fullpath)
-		return
+		if root, ok := GetDavRoot(key, fpath); ok {
+			return key + root, fpath[len(root)-1:]
+		}
 	}
-	return SplitUrl(fullpath)
+	return key, fpath
 }
 
 // JointPool is map with joint caches.
@@ -279,6 +286,9 @@ type SubPool struct {
 // NewSubPool creates new SubPool objects with given pool of caches
 // and given absolute root directory.
 func NewSubPool(jp *JointPool, dir string) *SubPool {
+	if jp == nil {
+		jp = NewJointPool()
+	}
 	return &SubPool{jp, dir}
 }
 
@@ -332,7 +342,7 @@ func (sp *SubPool) Sub(dir string) (fs.FS, error) {
 	if !fs.ValidPath(dir) {
 		return nil, fs.ErrInvalid
 	}
-	dir = JoinFast(sp.dir, dir)
+	dir = JoinPath(sp.dir, dir)
 	var fi, err = sp.JointPool.Stat(dir)
 	if err != nil {
 		return nil, err

@@ -11,41 +11,39 @@ import (
 
 type DavFileInfo = gowebdav.File
 
-// davpath is global map of WebDAV servises root paths by services URLs.
+// davroot is global map of WebDAV servises root paths by services URLs.
 // External links are external in all cases, so this object is singleton.
-var davpath = map[string]string{}
+var davroot = map[string]string{}
 var davmux sync.RWMutex
 
-// GetDavPath searches true path to WebDAV resource
-// by checking step-by-step elements of the path.
-func GetDavPath(davurl string) (dpath, fpath string, ok bool) {
-	defer func() {
-		if ok && dpath != davurl+"/" {
-			fpath = davurl[len(dpath):]
-		}
-	}()
-	var addr, route = SplitUrl(davurl)
+func GetDavRoot(addr, fpath string) (root string, ok bool) {
 	davmux.RLock()
-	dpath, ok = davpath[addr]
+	root, ok = davroot[addr]
 	davmux.RUnlock()
 	if ok {
 		return
 	}
-
-	dpath = addr
-	var chunks = strings.Split("/"+route, "/")
-	if chunks[len(chunks)-1] == "" {
-		chunks = chunks[:len(chunks)-1]
-	}
-	for _, chunk := range chunks {
-		dpath += chunk + "/"
-		var client = gowebdav.NewClient(dpath, "", "")
+	fpath = "/" + fpath // check up empty root
+	var pos int
+	for {
+		var i = strings.IndexByte(fpath[pos:], '/')
+		if i != -1 {
+			root = fpath[:pos+i+1]
+		} else {
+			root = fpath
+		}
+		var client = gowebdav.NewClient(addr+root, "", "")
 		if fi, err := client.Stat(""); err == nil && fi.IsDir() {
 			davmux.Lock()
-			davpath[addr] = dpath
+			davroot[addr] = root
 			davmux.Unlock()
 			ok = true
 			return
+		}
+		if i != -1 {
+			pos = i + 1
+		} else {
+			break
 		}
 	}
 	return

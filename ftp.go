@@ -50,12 +50,12 @@ func FtpEscapeBrackets(s string) string {
 type FtpJoint struct {
 	conn *ftp.ServerConn
 
-	path    string // path inside of FTP-service
-	entries []*ftp.Entry
-	io.ReadCloser
-	pos int64
-	end int64
-	rdn int
+	path string // path inside of FTP-service
+	list []*ftp.Entry
+	resp *ftp.Response
+	pos  int64
+	end  int64
+	rdn  int
 }
 
 func (j *FtpJoint) Make(base Joint, urladdr string) (err error) {
@@ -97,16 +97,16 @@ func (j *FtpJoint) Open(fpath string) (file fs.File, err error) {
 		return nil, fs.ErrExist
 	}
 	j.path = fpath
-	j.entries = nil // delete previous readdir result
-	j.rdn = 0       // start new sequence
+	j.list = nil // delete previous readdir result
+	j.rdn = 0    // start new sequence
 	return j, nil
 }
 
 func (j *FtpJoint) Close() (err error) {
 	j.path = ""
-	if j.ReadCloser != nil {
-		err = j.ReadCloser.Close()
-		j.ReadCloser = nil
+	if j.resp != nil {
+		err = j.resp.Close()
+		j.resp = nil
 	}
 	j.pos = 0
 	j.end = 0
@@ -114,21 +114,21 @@ func (j *FtpJoint) Close() (err error) {
 }
 
 func (j *FtpJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
-	if j.entries == nil {
+	if j.list == nil {
 		var fpath = FtpEscapeBrackets(j.path)
-		if j.entries, err = j.conn.List(fpath); err != nil {
+		if j.list, err = j.conn.List(fpath); err != nil {
 			return
 		}
-		if len(j.entries) < 2 {
+		if len(j.list) < 2 {
 			return nil, io.ErrUnexpectedEOF
 		}
-		j.entries = j.entries[2:] // skip "." and ".." directories
+		j.list = j.list[2:] // skip "." and ".." directories
 	}
 
 	if n < 0 {
-		n = len(j.entries) - j.rdn
-	} else if n > len(j.entries)-j.rdn {
-		n = len(j.entries) - j.rdn
+		n = len(j.list) - j.rdn
+	} else if n > len(j.list)-j.rdn {
+		n = len(j.list) - j.rdn
 		err = io.EOF
 	}
 	if n <= 0 { // on case all files readed or some deleted
@@ -136,7 +136,7 @@ func (j *FtpJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
 	}
 	list = make([]fs.DirEntry, n)
 	for i := 0; i < n; i++ {
-		list[i] = FtpFileInfo{j.entries[j.rdn+i]}
+		list[i] = FtpFileInfo{j.list[j.rdn+i]}
 	}
 	j.rdn += n
 	return
@@ -166,12 +166,12 @@ func (j *FtpJoint) Size() int64 {
 }
 
 func (j *FtpJoint) Read(b []byte) (n int, err error) {
-	if j.ReadCloser == nil {
-		if j.ReadCloser, err = j.conn.RetrFrom(j.path, uint64(j.pos)); err != nil {
+	if j.resp == nil {
+		if j.resp, err = j.conn.RetrFrom(j.path, uint64(j.pos)); err != nil {
 			return
 		}
 	}
-	n, err = j.ReadCloser.Read(b)
+	n, err = j.resp.Read(b)
 	j.pos += int64(n)
 	return
 }
@@ -206,9 +206,9 @@ func (j *FtpJoint) Seek(offset int64, whence int) (abs int64, err error) {
 		err = ErrFtpNegPos
 		return
 	}
-	if abs != j.pos && j.ReadCloser != nil {
-		j.ReadCloser.Close()
-		j.ReadCloser = nil
+	if abs != j.pos && j.resp != nil {
+		j.resp.Close()
+		j.resp = nil
 	}
 	j.pos = abs
 	return
@@ -219,9 +219,9 @@ func (j *FtpJoint) ReadAt(b []byte, off int64) (n int, err error) {
 		err = ErrFtpNegPos
 		return
 	}
-	if off != j.pos && j.ReadCloser != nil {
-		j.ReadCloser.Close()
-		j.ReadCloser = nil
+	if off != j.pos && j.resp != nil {
+		j.resp.Close()
+		j.resp = nil
 	}
 	j.pos = off
 	return j.Read(b)

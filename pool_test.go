@@ -106,3 +106,15 @@ func TestPoolFS(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDavRoot(t *testing.T) {
+	const url = "https://music:x@xbeowolf.keenetic.link/webdav/Artist/Yahel/Yahel%20-%20Avalanche.mp3"
+	var addr, fpath = jnt.SplitUrl(url)
+	var root, ok = jnt.GetDavRoot(addr, fpath)
+	_, _ = root, ok
+	var j, err = jnt.MakeJoint(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.Close()
+}

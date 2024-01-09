@@ -75,7 +75,7 @@ func (j *SftpJoint) Make(base Joint, urladdr string) (err error) {
 	}
 	if u.Path != "" && u.Path != "/" { // skip empty path
 		var fpath = strings.Trim(u.Path, "/")
-		j.pwd = JoinFast(j.pwd, fpath)
+		j.pwd = JoinPath(j.pwd, fpath)
 	}
 	return
 }
@@ -100,7 +100,7 @@ func (j *SftpJoint) Open(fpath string) (file fs.File, err error) {
 		return nil, fs.ErrExist
 	}
 	j.path = fpath
-	if j.File, err = j.client.Open(JoinFast(j.pwd, fpath)); err != nil {
+	if j.File, err = j.client.Open(JoinPath(j.pwd, fpath)); err != nil {
 		return
 	}
 	j.files = nil // delete previous readdir result
@@ -127,7 +127,7 @@ func (j *SftpJoint) Size() int64 {
 
 func (j *SftpJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
 	if j.files == nil {
-		if j.files, err = j.client.ReadDir(JoinFast(j.pwd, j.path)); err != nil {
+		if j.files, err = j.client.ReadDir(JoinPath(j.pwd, j.path)); err != nil {
 			return
 		}
 	}
@@ -155,7 +155,7 @@ func (j *SftpJoint) Stat() (fs.FileInfo, error) {
 }
 
 func (j *SftpJoint) Info(fpath string) (fs.FileInfo, error) {
-	var fi, err = j.client.Stat(JoinFast(j.pwd, fpath))
+	var fi, err = j.client.Stat(JoinPath(j.pwd, fpath))
 	return ToFileInfo(fi), err
 }
 

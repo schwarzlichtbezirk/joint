@@ -10,12 +10,13 @@ import (
 	jnt "github.com/schwarzlichtbezirk/joint"
 )
 
-func ExampleJoinFast() {
-	fmt.Println(jnt.JoinFast("any/path", "fox.txt"))
-	fmt.Println(jnt.JoinFast("any/path/", "fox.txt"))
-	fmt.Println(jnt.JoinFast("any", "/path/fox.txt"))
-	fmt.Println(jnt.JoinFast("any/path/", "/fox.txt"))
-	fmt.Println(jnt.JoinFast("/any/path", "fox.txt"))
+// JoinPath can be used for high performance path concatenation.
+func ExampleJoinPath() {
+	fmt.Println(jnt.JoinPath("any/path", "fox.txt"))
+	fmt.Println(jnt.JoinPath("any/path/", "fox.txt"))
+	fmt.Println(jnt.JoinPath("any", "/path/fox.txt"))
+	fmt.Println(jnt.JoinPath("any/path/", "/fox.txt"))
+	fmt.Println(jnt.JoinPath("/any/path", "fox.txt"))
 	// Output:
 	// any/path/fox.txt
 	// any/path/fox.txt
@@ -30,6 +31,7 @@ func ExampleSplitUrl() {
 		"sftp://music:x@192.168.1.1:22/Video",
 		"https://github.com/schwarzlichtbezirk/joint",
 		"https://pkg.go.dev/github.com/schwarzlichtbezirk/joint",
+		"C:\\Windows\\System",
 	}
 	for _, s := range list {
 		var addr, fpath = jnt.SplitUrl(s)
@@ -40,6 +42,7 @@ func ExampleSplitUrl() {
 	// addr: sftp://music:x@192.168.1.1:22, path: Video
 	// addr: https://github.com, path: schwarzlichtbezirk/joint
 	// addr: https://pkg.go.dev, path: github.com/schwarzlichtbezirk/joint
+	// addr: C:, path: Windows\System
 }
 
 func ExampleSplitKey() {
@@ -69,17 +72,34 @@ func ExampleFtpEscapeBrackets() {
 	// Output: Music/Denney [[]2018[]]
 }
 
+func ExampleJointCache_Open() {
+	var jc = jnt.NewJointCache("testdata/external.iso")
+	defer jc.Close()
+
+	var f, err = jc.Open("fox.txt")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	io.Copy(os.Stdout, f)
+	// Output: The quick brown fox jumps over the lazy dog.
+}
+
+// Opens file on joints pool. Path to file can starts with
+// FTP/SFTP/WebDAV server address or at local filesystem, and
+// include ISO9660 disks as chunks of path.
 func ExampleJointPool_Open() {
 	var jp = jnt.NewJointPool() // can be global declaration
 	defer jp.Close()
 
-	var j, err = jp.Open("testdata/external.iso/fox.txt")
+	var f, err = jp.Open("testdata/external.iso/fox.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer j.Close()
+	defer f.Close()
 
-	io.Copy(os.Stdout, j)
+	io.Copy(os.Stdout, f)
 	// Output: The quick brown fox jumps over the lazy dog.
 }
 
@@ -120,20 +140,6 @@ func ExampleJointPool_ReadDir() {
 	// file: lorem3.txt, 2714 bytes
 	// dir:  доки
 	// file: рыба.txt, 1789 bytes
-}
-
-func ExampleJointCache_Open() {
-	var jc = jnt.NewJointCache("testdata/external.iso")
-	defer jc.Close()
-
-	var f, err = jc.Open("fox.txt")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer f.Close()
-
-	io.Copy(os.Stdout, f)
-	// Output: The quick brown fox jumps over the lazy dog.
 }
 
 // Open http://localhost:8080/ in browser

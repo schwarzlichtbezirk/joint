@@ -17,8 +17,11 @@
 # Dependency directories (remove the comment below to include it)
 # vendor/
 
+# Go workspace file
+go.work
+
 # Visual Studio settings
 .vs/
 
-# Go workspace file
-go.work
+# Visual Studio Code settings
+.vscode/

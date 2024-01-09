@@ -33,7 +33,7 @@ func (j *SysJoint) Open(fpath string) (file fs.File, err error) {
 	if j.Busy() {
 		return nil, fs.ErrExist
 	}
-	if j.File, err = os.Open(JoinFast(j.dir, fpath)); err != nil {
+	if j.File, err = os.Open(JoinPath(j.dir, fpath)); err != nil {
 		return
 	}
 	return j, nil
@@ -78,7 +78,7 @@ func (j *SysJoint) Stat() (fs.FileInfo, error) {
 }
 
 func (j *SysJoint) Info(fpath string) (fs.FileInfo, error) {
-	var fi, err = os.Stat(JoinFast(j.dir, fpath))
+	var fi, err = os.Stat(JoinPath(j.dir, fpath))
 	return ToFileInfo(fi), err
 }
 

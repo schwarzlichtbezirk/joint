@@ -37,6 +37,7 @@ type Joint interface {
 	RFile
 }
 
+// fileinfo is wrapper around inherited fs.FileInfo to provide derived IsDir.
 type fileinfo struct {
 	fs.FileInfo
 }
@@ -154,7 +155,7 @@ func (jc *JointCache) Open(fpath string) (f fs.File, err error) {
 	if _, err = jw.Open(fpath); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			jc.Put(jw) // reuse joint
-		} else if !errors.Is(err, fs.ErrExist) {
+		} else if !errors.Is(err, fs.ErrExist) { // not already opened
 			jw.Cleanup() // drop the joint
 		}
 		return
