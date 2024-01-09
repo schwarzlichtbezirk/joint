@@ -81,5 +81,3 @@ func (j *SysJoint) Info(fpath string) (fs.FileInfo, error) {
 	var fi, err = os.Stat(JoinPath(j.dir, fpath))
 	return ToFileInfo(fi), err
 }
-
-// The End.

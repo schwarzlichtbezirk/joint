@@ -34,15 +34,15 @@ func ExampleSplitUrl() {
 		"C:\\Windows\\System",
 	}
 	for _, s := range list {
-		var addr, fpath = jnt.SplitUrl(s)
-		fmt.Printf("addr: %s, path: %s\n", addr, fpath)
+		var addr, fpath, url = jnt.SplitUrl(s)
+		fmt.Printf("addr: %s, path: %s, url: %t\n", addr, fpath, url)
 	}
 	// Output:
-	// addr: ftp://music:x@192.168.1.1:21, path: Music/DJ.m3u
-	// addr: sftp://music:x@192.168.1.1:22, path: Video
-	// addr: https://github.com, path: schwarzlichtbezirk/joint
-	// addr: https://pkg.go.dev, path: github.com/schwarzlichtbezirk/joint
-	// addr: C:, path: Windows\System
+	// addr: ftp://music:x@192.168.1.1:21, path: Music/DJ.m3u, url: true
+	// addr: sftp://music:x@192.168.1.1:22, path: Video, url: true
+	// addr: https://github.com, path: schwarzlichtbezirk/joint, url: true
+	// addr: https://pkg.go.dev, path: github.com/schwarzlichtbezirk/joint, url: true
+	// addr: C:, path: Windows\System, url: false
 }
 
 func ExampleSplitKey() {
@@ -53,9 +53,11 @@ func ExampleSplitKey() {
 		"testdata/external.iso/disk/internal.iso/fox.txt",
 		"ftp://music:x@192.168.1.1:21/Music",
 		"ftp://music:x@192.168.1.1:21/testdata/external.iso/disk/internal.iso/docs/doc1.txt",
+		"https://music:x@example.keenetic.link/webdav/Global%20Underground/Nubreed/",
 	}
+	jnt.SetDavRoot("https://music:x@example.keenetic.link", "/webdav/")
 	for _, s := range list {
-		var key, fpath = jnt.SplitKey(s)
+		var key, fpath, _ = jnt.SplitKey(s)
 		fmt.Printf("key: '%s', path: '%s'\n", key, fpath)
 	}
 	// Output:
@@ -65,6 +67,7 @@ func ExampleSplitKey() {
 	// key: 'testdata/external.iso/disk/internal.iso', path: 'fox.txt'
 	// key: 'ftp://music:x@192.168.1.1:21', path: 'Music'
 	// key: 'ftp://music:x@192.168.1.1:21/testdata/external.iso/disk/internal.iso', path: 'docs/doc1.txt'
+	// key: 'https://music:x@example.keenetic.link/webdav/', path: 'Global%20Underground/Nubreed/'
 }
 
 func ExampleFtpEscapeBrackets() {
@@ -87,7 +90,7 @@ func ExampleJointCache_Open() {
 }
 
 // Opens file on joints pool. Path to file can starts with
-// FTP/SFTP/WebDAV server address or at local filesystem, and
+// WebDAV/SFTP/FTP service address or at local filesystem, and
 // include ISO9660 disks as chunks of path.
 func ExampleJointPool_Open() {
 	var jp = jnt.NewJointPool() // can be global declaration
@@ -156,5 +159,3 @@ func ExampleJointPool_Sub() {
 	http.Handle("/", http.FileServer(http.FS(sp)))
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
-
-// The End.

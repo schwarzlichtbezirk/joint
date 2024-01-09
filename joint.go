@@ -5,6 +5,7 @@ import (
 	"io"
 	"io/fs"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -35,6 +36,72 @@ type Joint interface {
 	Size() int64              // helps to make io.SectionReader
 	fs.ReadDirFile            // read directory pointed by local file path
 	RFile
+}
+
+// MakeJoint creates joint with all subsequent chain of joints.
+// Please note that folders with .iso extension and non ISO-images
+// with .iso extension will cause an error.
+func MakeJoint(fullpath string) (j Joint, err error) {
+	var addr, fpath, is = SplitUrl(fullpath)
+	if HasFoldPrefix(fullpath, "ftp://") {
+		j = &FtpJoint{}
+		if err = j.Make(nil, addr); err != nil {
+			return
+		}
+	} else if HasFoldPrefix(fullpath, "sftp://") {
+		j = &SftpJoint{}
+		if err = j.Make(nil, addr); err != nil {
+			return
+		}
+	} else if HasFoldPrefix(fullpath, "http://") || HasFoldPrefix(fullpath, "https://") {
+		var root, ok = FindDavRoot(addr, fpath)
+		if !ok {
+			err = fs.ErrNotExist
+			return
+		}
+		fpath = fpath[len(root)-1:]
+		j = &DavJoint{}
+		if err = j.Make(nil, addr+root); err != nil {
+			return
+		}
+	} else if !is {
+		j = &SysJoint{dir: addr}
+	} else {
+		err = fs.ErrNotExist
+		return
+	}
+
+	var jpos = 0
+	for {
+		var p1 = strings.Index(fpath[jpos:], ".iso/")
+		var p2 = strings.Index(fpath[jpos:], ".ISO/")
+		if p1 == p2 { // p1 == -1 && p2 == -1
+			break
+		}
+		var p int
+		if p1 == -1 {
+			p = p2
+		} else if p2 == -1 {
+			p = p1
+		} else {
+			p = min(p1, p2)
+		}
+		var key = fpath[:p+4]
+		var jiso = &IsoJoint{}
+		if err = jiso.Make(j, key); err != nil {
+			return
+		}
+		j, jpos = jiso, p+5
+	}
+	if IsTypeIso(fpath[jpos:]) {
+		var key = fpath[jpos:]
+		var jiso = &IsoJoint{}
+		if err = jiso.Make(j, key); err != nil {
+			return
+		}
+		j = jiso
+	}
+	return
 }
 
 // fileinfo is wrapper around inherited fs.FileInfo to provide derived IsDir.
@@ -303,5 +370,3 @@ func (jc *JointCache) Eject(j Joint) bool {
 	}
 	return false
 }
-
-// The End.

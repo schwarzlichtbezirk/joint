@@ -3,145 +3,9 @@ package joint
 import (
 	"errors"
 	"io/fs"
-	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 )
-
-// JoinPath performs fast join of two path chunks.
-func JoinPath(dir, base string) string {
-	if dir == "" || dir == "." {
-		return base
-	}
-	if base == "" || base == "." {
-		return dir
-	}
-	if dir[len(dir)-1] == '/' {
-		if base[0] == '/' {
-			return dir + base[1:]
-		} else {
-			return dir + base
-		}
-	}
-	if base[0] == '/' {
-		return dir + base
-	}
-	return dir + "/" + base
-}
-
-// IsTypeIso checks that endpoint-file in given path has ISO-extension.
-func IsTypeIso(fpath string) bool {
-	if len(fpath) < 4 {
-		return false
-	}
-	var ext = fpath[len(fpath)-4:]
-	return ext == ".iso" || ext == ".ISO"
-}
-
-// MakeJoint creates joint with all subsequent chain of joints.
-// Please note that folders with .iso extension and non ISO-images
-// with .iso extension will cause an error.
-func MakeJoint(fullpath string) (j Joint, err error) {
-	var addr, fpath = SplitUrl(fullpath)
-	if strings.HasPrefix(fullpath, "ftp://") {
-		j = &FtpJoint{}
-		if err = j.Make(nil, addr); err != nil {
-			return
-		}
-	} else if strings.HasPrefix(fullpath, "sftp://") {
-		j = &SftpJoint{}
-		if err = j.Make(nil, addr); err != nil {
-			return
-		}
-	} else if strings.HasPrefix(fullpath, "http://") || strings.HasPrefix(fullpath, "https://") {
-		var root, ok = GetDavRoot(addr, fpath)
-		if !ok {
-			err = fs.ErrNotExist
-			return
-		}
-		fpath = fpath[len(root)-1:]
-		j = &DavJoint{}
-		if err = j.Make(nil, addr+root); err != nil {
-			return
-		}
-	} else {
-		j = &SysJoint{
-			dir: addr,
-		}
-	}
-
-	var jpos = 0
-	for {
-		var p1 = strings.Index(fpath[jpos:], ".iso/")
-		var p2 = strings.Index(fpath[jpos:], ".ISO/")
-		if p1 == p2 { // p1 == -1 && p2 == -1
-			break
-		}
-		var p int
-		if p1 == -1 {
-			p = p2
-		} else if p2 == -1 {
-			p = p1
-		} else {
-			p = min(p1, p2)
-		}
-		var key = fpath[:p+4]
-		var jiso = &IsoJoint{}
-		if err = jiso.Make(j, key); err != nil {
-			return
-		}
-		j, jpos = jiso, p+5
-	}
-	if IsTypeIso(fpath[jpos:]) {
-		var key = fpath[jpos:]
-		var jiso = &IsoJoint{}
-		if err = jiso.Make(j, key); err != nil {
-			return
-		}
-		j = jiso
-	}
-	return
-}
-
-// SplitUrl splits URL to address string and to path as is.
-// For file path it splits to volume name and path at this volume.
-func SplitUrl(urlpath string) (string, string) {
-	if i := strings.Index(urlpath, "://"); i != -1 {
-		if j := strings.Index(urlpath[i+3:], "/"); j != -1 {
-			return urlpath[:i+3+j], urlpath[i+3+j+1:]
-		}
-		return urlpath, ""
-	}
-	if vol := filepath.VolumeName(urlpath); len(vol) > 0 {
-		if len(urlpath) > len(vol)+1 {
-			return vol, urlpath[len(vol)+1:]
-		}
-		return vol, ""
-	}
-	return "", urlpath
-}
-
-// SplitKey splits full path to joint key to establish link, and
-// remained local path.
-func SplitKey(fullpath string) (key, fpath string) {
-	if IsTypeIso(fullpath) {
-		return fullpath, ""
-	}
-	var p = max(
-		strings.LastIndex(fullpath, ".iso/"),
-		strings.LastIndex(fullpath, ".ISO/"))
-	if p != -1 {
-		return fullpath[:p+4], fullpath[p+5:]
-	}
-	key, fpath = SplitUrl(fullpath)
-	if strings.HasPrefix(fullpath, "http://") || strings.HasPrefix(fullpath, "https://") {
-		if root, ok := GetDavRoot(key, fpath); ok {
-			return key + root, fpath[len(root)-1:]
-		}
-	}
-	return key, fpath
-}
 
 // JointPool is map with joint caches.
 // Each key in map is address or path to file system resource,
@@ -215,9 +79,9 @@ func (jp *JointPool) GetJoint(key string) (j Joint, err error) {
 // Open implements fs.FS interface,
 // and returns file that can be casted to joint wrapper.
 func (jp *JointPool) Open(fullpath string) (f fs.File, err error) {
-	var key, fpath = SplitKey(fullpath)
-	if key == "" {
-		var j = &SysJoint{}
+	var key, fpath, isurl = SplitKey(fullpath)
+	if !isurl {
+		var j = &SysJoint{dir: key}
 		return j.Open(fpath)
 	}
 	var jc = jp.GetCache(key)
@@ -253,13 +117,11 @@ func (jp *JointPool) ReadDir(fullpath string) (list []fs.DirEntry, err error) {
 }
 
 // Sub returns new file subsystem with given absolute root directory.
-// Performs given directory check up.
+// It's assumed that this call can be used to get access to some
+// WebDAV/SFTP/FTP service.
 // Sub implements fs.SubFS interface,
 // and returns object that can be casted to *SubPool.
 func (jp *JointPool) Sub(dir string) (fs.FS, error) {
-	if !fs.ValidPath(dir) || dir == "" || dir == "." {
-		return nil, fs.ErrInvalid
-	}
 	var fi, err = jp.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -275,9 +137,10 @@ func (jp *JointPool) Sub(dir string) (fs.FS, error) {
 }
 
 // SubPool releases io/fs interfaces in the way that
-// can be used for http-handlers. It has pointer to pool,
-// so several derived file subsystems can share same pool
-// of caches.
+// can be used for http-handlers. It has pointer to pool
+// to share same pool for several derived file subsystems.
+// SubPool is developed to pass fstest.TestFS tests, and
+// all its functions receives only valid FS-paths.
 type SubPool struct {
 	*JointPool
 	dir string
@@ -300,38 +163,26 @@ func (sp *SubPool) Dir() string {
 // Open implements fs.FS interface,
 // and returns file that can be casted to joint wrapper.
 func (sp *SubPool) Open(fpath string) (f fs.File, err error) {
-	if !fs.ValidPath(fpath) {
+	if sp.dir != "" && sp.dir != "." && !fs.ValidPath(fpath) {
 		return nil, fs.ErrInvalid
 	}
-	var fullpath = sp.dir
-	if fpath != "" && fpath != "." {
-		fullpath += "/" + fpath
-	}
-	return sp.JointPool.Open(fullpath)
+	return sp.JointPool.Open(JoinPath(sp.dir, fpath))
 }
 
 // Stat implements fs.StatFS interface.
 func (sp *SubPool) Stat(fpath string) (fi fs.FileInfo, err error) {
-	if !fs.ValidPath(fpath) {
+	if sp.dir != "" && sp.dir != "." && !fs.ValidPath(fpath) {
 		return nil, fs.ErrInvalid
 	}
-	var fullpath = sp.dir
-	if fpath != "" && fpath != "." {
-		fullpath += "/" + fpath
-	}
-	return sp.JointPool.Stat(fullpath)
+	return sp.JointPool.Stat(JoinPath(sp.dir, fpath))
 }
 
 // ReadDir implements ReadDirFS interface.
 func (sp *SubPool) ReadDir(fpath string) (ret []fs.DirEntry, err error) {
-	if !fs.ValidPath(fpath) {
+	if sp.dir != "" && sp.dir != "." && !fs.ValidPath(fpath) {
 		return nil, fs.ErrInvalid
 	}
-	var fullpath = sp.dir
-	if fpath != "" && fpath != "." {
-		fullpath += "/" + fpath
-	}
-	return sp.JointPool.ReadDir(fullpath)
+	return sp.JointPool.ReadDir(JoinPath(sp.dir, fpath))
 }
 
 // Sub returns new file subsystem with given relative root directory.
@@ -339,22 +190,8 @@ func (sp *SubPool) ReadDir(fpath string) (ret []fs.DirEntry, err error) {
 // Sub implements fs.SubFS interface,
 // and returns object that can be casted to *SubPool.
 func (sp *SubPool) Sub(dir string) (fs.FS, error) {
-	if !fs.ValidPath(dir) {
+	if sp.dir != "" && sp.dir != "." && !fs.ValidPath(dir) {
 		return nil, fs.ErrInvalid
 	}
-	dir = JoinPath(sp.dir, dir)
-	var fi, err = sp.JointPool.Stat(dir)
-	if err != nil {
-		return nil, err
-	}
-	var jfi = fi.(FileInfo)
-	if jfi.IsRealDir() && IsTypeIso(dir) {
-		return nil, fs.ErrNotExist
-	}
-	return &SubPool{
-		JointPool: sp.JointPool,
-		dir:       dir,
-	}, nil
+	return sp.JointPool.Sub(JoinPath(sp.dir, dir))
 }
-
-// The End.

@@ -158,5 +158,3 @@ func (j *SftpJoint) Info(fpath string) (fs.FileInfo, error) {
 	var fi, err = j.client.Stat(JoinPath(j.pwd, fpath))
 	return ToFileInfo(fi), err
 }
-
-// The End.

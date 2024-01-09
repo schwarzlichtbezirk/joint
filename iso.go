@@ -207,5 +207,3 @@ func (fi IsoFileInfo) Sys() interface{} {
 func (fi IsoFileInfo) String() string {
 	return fs.FormatDirEntry(fi)
 }
-
-// The End.

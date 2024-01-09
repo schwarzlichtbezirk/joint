@@ -16,11 +16,25 @@ type DavFileInfo = gowebdav.File
 var davroot = map[string]string{}
 var davmux sync.RWMutex
 
-func GetDavRoot(addr, fpath string) (root string, ok bool) {
+// GetDavRoot returns cached WebDAV root for given address.
+func GetDavRoot(addr string) (root string, ok bool) {
 	davmux.RLock()
 	root, ok = davroot[addr]
 	davmux.RUnlock()
-	if ok {
+	return
+}
+
+// SetDavRoot associates given WebDAV root with address without check up.
+func SetDavRoot(addr, root string) {
+	davmux.Lock()
+	davroot[addr] = root
+	davmux.Unlock()
+}
+
+// FindDavRoot returns cached root for given address,
+// or tries to find it from given path.
+func FindDavRoot(addr, fpath string) (root string, ok bool) {
+	if root, ok = GetDavRoot(addr); ok {
 		return
 	}
 	fpath = "/" + fpath // check up empty root
@@ -34,9 +48,7 @@ func GetDavRoot(addr, fpath string) (root string, ok bool) {
 		}
 		var client = gowebdav.NewClient(addr+root, "", "")
 		if fi, err := client.Stat(""); err == nil && fi.IsDir() {
-			davmux.Lock()
-			davroot[addr] = root
-			davmux.Unlock()
+			SetDavRoot(addr, root)
 			ok = true
 			return
 		}
@@ -199,5 +211,3 @@ func (j *DavJoint) Info(fpath string) (fs.FileInfo, error) {
 	var fi, err = j.client.Stat(fpath)
 	return ToFileInfo(fi), err
 }
-
-// The End.

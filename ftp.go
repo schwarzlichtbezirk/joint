@@ -301,5 +301,3 @@ func (fi FtpFileInfo) Sys() interface{} {
 func (fi FtpFileInfo) String() string {
 	return fs.FormatDirEntry(fi)
 }
-
-// The End.

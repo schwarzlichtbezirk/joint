@@ -27,9 +27,9 @@ import (
 // Open http://localhost:8080/ in browser
 // to get a list of files in WebDAV-server for given user.
 func main() {
-    var jc = jnt.NewJointCache("https://music:x@192.168.1.1/webdav/")
-    defer jc.Close()
-    http.Handle("/", http.FileServer(http.FS(jc)))
+    var sp = jnt.NewSubPool(nil, "https://music:x@example.keenetic.link/webdav/")
+    defer sp.Close()
+    http.Handle("/", http.FileServer(http.FS(sp)))
     log.Fatal(http.ListenAndServe(":8080", nil))
 }
 ```
@@ -75,8 +75,6 @@ import (
     jnt "github.com/schwarzlichtbezirk/hms/joint"
 )
 
-var jp = jnt.NewJointPool()
-
 // http://localhost:8080/iso/ - content of ISO-image
 // http://localhost:8080/dav/ - content of WebDAV-server
 // http://localhost:8080/ftp/ - content of FTP-server
@@ -89,7 +87,7 @@ func main() {
     http.Handle("/iso/", http.StripPrefix("/iso/", http.FileServer(
         http.FS(jnt.NewSubPool(jp, "testdata/external.iso")))))
     http.Handle("/dav/", http.StripPrefix("/dav/", http.FileServer(
-        http.FS(jnt.NewSubPool(jp, "https://music:x@192.168.1.1/webdav/")))))
+        http.FS(jnt.NewSubPool(jp, "https://music:x@example.keenetic.link/webdav/")))))
     http.Handle("/ftp/", http.StripPrefix("/ftp/", http.FileServer(
         http.FS(jnt.NewSubPool(jp, "ftp://music:x@192.168.1.1:21")))))
     http.Handle("/sftp/", http.StripPrefix("/sftp/", http.FileServer(
@@ -219,4 +217,4 @@ func main() {
 ```
 
 ---
-(c) schwarzlichtbezirk, 2023.
+(c) schwarzlichtbezirk, 2023-2024.
