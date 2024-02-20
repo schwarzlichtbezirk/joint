@@ -117,12 +117,12 @@ func (j *SftpJoint) Close() (err error) {
 	return
 }
 
-func (j *SftpJoint) Size() int64 {
+func (j *SftpJoint) Size() (int64, error) {
 	var fi, err = j.File.Stat()
 	if err != nil {
-		return 0
+		return 0, err
 	}
-	return fi.Size()
+	return fi.Size(), nil
 }
 
 func (j *SftpJoint) ReadDir(n int) (list []fs.DirEntry, err error) {

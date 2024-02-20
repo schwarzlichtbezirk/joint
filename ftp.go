@@ -116,13 +116,21 @@ func (j *FtpJoint) Close() (err error) {
 func (j *FtpJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
 	if j.list == nil {
 		var fpath = FtpEscapeBrackets(j.path)
-		if j.list, err = j.conn.List(fpath); err != nil {
+		var list2 []*ftp.Entry
+		if list2, err = j.conn.List(fpath); err != nil {
 			return
 		}
-		if len(j.list) < 2 {
-			return nil, io.ErrUnexpectedEOF
+		// skip "." and ".." directories
+		var i int
+		for i < len(list2) {
+			if list2[i].Name == "." || list2[i].Name == ".." {
+				copy(list2[i:], list2[i+1:])
+				list2 = list2[:len(list2)-1]
+			} else {
+				i++
+			}
 		}
-		j.list = j.list[2:] // skip "." and ".." directories
+		j.list = list2
 	}
 
 	if n < 0 {
@@ -158,11 +166,16 @@ func (j *FtpJoint) Info(fpath string) (fs.FileInfo, error) {
 	return FtpFileInfo{ent}, nil
 }
 
-func (j *FtpJoint) Size() int64 {
+func (j *FtpJoint) Size() (int64, error) {
+	var err error
 	if j.end == 0 {
-		j.end, _ = j.conn.FileSize(j.path)
+		j.end, err = j.conn.FileSize(j.path)
 	}
-	return j.end
+	return j.end, err
+}
+
+func (j *FtpJoint) ModTime() (time.Time, error) {
+	return j.conn.GetTime(j.path)
 }
 
 func (j *FtpJoint) Read(b []byte) (n int, err error) {

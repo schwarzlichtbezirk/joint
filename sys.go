@@ -47,12 +47,12 @@ func (j *SysJoint) Close() (err error) {
 	return
 }
 
-func (j *SysJoint) Size() int64 {
+func (j *SysJoint) Size() (int64, error) {
 	var fi, err = j.File.Stat()
 	if err != nil {
-		return 0
+		return 0, err
 	}
-	return fi.Size()
+	return fi.Size(), nil
 }
 
 func (j *SysJoint) ReadDir(n int) ([]fs.DirEntry, error) {

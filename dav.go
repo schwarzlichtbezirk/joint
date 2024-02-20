@@ -115,12 +115,12 @@ func (j *DavJoint) Close() (err error) {
 	return
 }
 
-func (j *DavJoint) Size() int64 {
+func (j *DavJoint) Size() (int64, error) {
 	var fi, err = j.client.Stat(j.path)
 	if err != nil {
-		return 0
+		return 0, err
 	}
-	return fi.Size()
+	return fi.Size(), nil
 }
 
 func (j *DavJoint) ReadDir(n int) (list []fs.DirEntry, err error) {

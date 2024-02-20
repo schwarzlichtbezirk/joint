@@ -64,7 +64,11 @@ func (j *IsoJoint) Open(fpath string) (file fs.File, err error) {
 		return
 	}
 	if fpath == "" { // open base ISO-disk to read
-		j.SectionReader = io.NewSectionReader(j.Base, 0, j.Base.Size())
+		var size int64
+		if size, err = j.Base.Size(); err != nil {
+			return
+		}
+		j.SectionReader = io.NewSectionReader(j.Base, 0, size)
 	} else if sr := j.File.Reader(); sr != nil {
 		j.SectionReader = sr.(*io.SectionReader)
 	}
@@ -120,9 +124,8 @@ func (j *IsoJoint) OpenFile(fpath string) (*iso.File, error) {
 	return file, nil
 }
 
-// Size of file. Resolve duality between File.Size() and SectionReader.Size().
-func (j *IsoJoint) Size() int64 {
-	return j.File.Size()
+func (j *IsoJoint) Size() (int64, error) {
+	return j.File.Size(), nil
 }
 
 func (j *IsoJoint) ReadDir(n int) (list []fs.DirEntry, err error) {

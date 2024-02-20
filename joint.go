@@ -33,7 +33,7 @@ type Joint interface {
 	Busy() bool               // file is opened
 	fs.FS                     // open file with local file path
 	io.Closer                 // close local file
-	Size() int64              // helps to make io.SectionReader
+	Size() (int64, error)     // helps to make io.SectionReader
 	fs.ReadDirFile            // read directory pointed by local file path
 	RFile
 }
