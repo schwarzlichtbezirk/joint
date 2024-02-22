@@ -80,11 +80,14 @@ func (j *FtpJoint) Make(base Joint, urladdr string) (err error) {
 }
 
 func (j *FtpJoint) Cleanup() error {
-	var err1 error
+	var err1, err2 error
 	if j.Busy() {
 		err1 = j.Close()
 	}
-	var err2 = j.conn.Quit()
+	if j.conn != nil {
+		err2 = j.conn.Quit()
+		j.conn = nil
+	}
 	return errors.Join(err1, err2)
 }
 

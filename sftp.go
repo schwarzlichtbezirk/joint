@@ -81,12 +81,18 @@ func (j *SftpJoint) Make(base Joint, urladdr string) (err error) {
 }
 
 func (j *SftpJoint) Cleanup() error {
-	var err1 error
+	var err1, err2, err3 error
 	if j.Busy() {
 		err1 = j.Close()
 	}
-	var err2 = j.client.Close()
-	var err3 = j.conn.Close()
+	if j.client != nil {
+		err2 = j.client.Close()
+		j.client = nil
+	}
+	if j.conn != nil {
+		err3 = j.conn.Close()
+		j.conn = nil
+	}
 	return errors.Join(err1, err2, err3)
 }
 

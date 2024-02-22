@@ -153,39 +153,58 @@ func checkDir(j jnt.Joint, fpath string, dirs map[string][]string) (err error) {
 	return nil
 }
 
+const foxsize = 44 // size of "fox.txt" file
+
 // Open file "fox.txt" with content "The quick brown fox
 // jumps over the lazy dog." and read chunks from it.
-func TestReadChunk(t *testing.T) {
-	var err error
-
-	var j jnt.Joint = &jnt.IsoJoint{}
-	if err = j.Make(nil, "testdata/external.iso"); err != nil {
-		t.Fatal(err)
+func readChunk(j, base jnt.Joint) (err error) {
+	if err = j.Make(base, "testdata/external.iso"); err != nil {
+		return
 	}
 	defer j.Cleanup()
 
 	if _, err = j.Open("fox.txt"); err != nil {
-		t.Fatal(err)
+		return
 	}
 	defer j.Close()
 
+	var size int64
+	if size, err = j.Size(); err != nil {
+		return
+	}
+	if size != foxsize {
+		return fmt.Errorf("size of 'external.iso' file does not equal to predefined value")
+	}
+
 	var b1 [9]byte // buffer for "brown fox" chunk from file content
 	if _, err = j.ReadAt(b1[:], 10); err != nil {
-		t.Fatal(err)
+		return
 	}
 	if string(b1[:]) != "brown fox" {
-		t.Fatal("read string does not match to pattern")
+		return fmt.Errorf("read string does not match to pattern")
 	}
 
 	var b2 [8]byte // buffer for "lazy dog" chunk from file content
 	if _, err = j.Seek(35, io.SeekStart); err != nil {
-		t.Fatal(err)
+		return
 	}
 	if _, err = j.Read(b2[:]); err != nil {
-		t.Fatal(err)
+		return
 	}
 	if string(b2[:]) != "lazy dog" {
-		t.Fatal("read string does not match to pattern")
+		return fmt.Errorf("read string does not match to pattern")
+	}
+
+	return
+}
+
+// Read files chunks on IsoJoint.
+func TestIsoReadChunk(t *testing.T) {
+	var err error
+
+	var j jnt.Joint = &jnt.IsoJoint{}
+	if err = readChunk(j, nil); err != nil {
+		t.Fatal(err)
 	}
 }
 

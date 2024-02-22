@@ -40,12 +40,14 @@ func (j *IsoJoint) Make(base Joint, isopath string) (err error) {
 	return
 }
 
-func (j *IsoJoint) Cleanup() error {
+func (j *IsoJoint) Cleanup() (err error) {
 	if j.Busy() {
 		j.Close()
 	}
-	var err = j.Base.Cleanup()
-	j.Base = nil
+	if j.Base != nil {
+		err = j.Base.Cleanup()
+		j.Base = nil
+	}
 	return err
 }
 

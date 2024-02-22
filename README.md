@@ -170,13 +170,15 @@ func main() {
     if err = j1.Make(nil, "testdata/external.iso"); err != nil {
         log.Fatal(err)
     }
+    defer j1.Cleanup()
 
     // Create top-level joint to internal ISO-image placed inside of first.
     var j2 jnt.Joint = &jnt.IsoJoint{}
     if err = j2.Make(j1, "disk/internal.iso"); err != nil {
         log.Fatal(err)
     }
-    defer j2.Cleanup() // only top-level joint must be called for Cleanup
+    // Top-level calls inherited Cleanup, so this call can be one.
+    defer j2.Cleanup()
 
     // Open file at internal ISO-image.
     var f fs.File
