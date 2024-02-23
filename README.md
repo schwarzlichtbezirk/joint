@@ -143,7 +143,7 @@ func main() {
     if _, err = io.Copy(os.Stdout, j); err != nil { // read from joint
         log.Fatal(err)
     }
-    j.Close()
+    j.Close() // f.Close() and j.Close() do the same work
 }
 ```
 
@@ -170,14 +170,14 @@ func main() {
     if err = j1.Make(nil, "testdata/external.iso"); err != nil {
         log.Fatal(err)
     }
-    defer j1.Cleanup()
+    defer j1.Cleanup() // Cleanup or Close can be called twice
 
     // Create top-level joint to internal ISO-image placed inside of first.
     var j2 jnt.Joint = &jnt.IsoJoint{}
     if err = j2.Make(j1, "disk/internal.iso"); err != nil {
         log.Fatal(err)
     }
-    // Top-level calls inherited Cleanup, so this call can be one.
+    // Top-level joint calls inherited Cleanup, so this call can be one.
     defer j2.Cleanup()
 
     // Open file at internal ISO-image.
@@ -185,7 +185,7 @@ func main() {
     if f, err = j2.Open("fox.txt"); err != nil {
         log.Fatal(err)
     }
-    defer f.Close()
+    defer f.Close() // Close file and joint can be reused
 
     io.Copy(os.Stdout, f)
 }
@@ -212,7 +212,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    defer j.Close()
+    defer j.Cleanup()
 
     io.Copy(os.Stdout, j)
 }

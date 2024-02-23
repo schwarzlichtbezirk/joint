@@ -117,6 +117,10 @@ func (j *FtpJoint) Close() (err error) {
 }
 
 func (j *FtpJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
+	if j.resp != nil {
+		j.resp.Close()
+		j.resp = nil
+	}
 	if j.list == nil {
 		var fpath = FtpEscapeBrackets(j.path)
 		var list2 []*ftp.Entry
@@ -154,6 +158,10 @@ func (j *FtpJoint) ReadDir(n int) (list []fs.DirEntry, err error) {
 }
 
 func (j *FtpJoint) Stat() (fs.FileInfo, error) {
+	if j.resp != nil {
+		j.resp.Close()
+		j.resp = nil
+	}
 	var ent, err = j.conn.GetEntry(j.path)
 	if err != nil {
 		return nil, err
@@ -162,6 +170,10 @@ func (j *FtpJoint) Stat() (fs.FileInfo, error) {
 }
 
 func (j *FtpJoint) Info(fpath string) (fs.FileInfo, error) {
+	if j.resp != nil {
+		j.resp.Close()
+		j.resp = nil
+	}
 	var ent, err = j.conn.GetEntry(fpath)
 	if err != nil {
 		return nil, err
@@ -170,14 +182,23 @@ func (j *FtpJoint) Info(fpath string) (fs.FileInfo, error) {
 }
 
 func (j *FtpJoint) Size() (int64, error) {
+	if j.resp != nil {
+		j.resp.Close()
+		j.resp = nil
+	}
 	var err error
 	if j.end == 0 {
+		time.Sleep(500 * time.Millisecond)
 		j.end, err = j.conn.FileSize(j.path)
 	}
 	return j.end, err
 }
 
 func (j *FtpJoint) ModTime() (time.Time, error) {
+	if j.resp != nil {
+		j.resp.Close()
+		j.resp = nil
+	}
 	return j.conn.GetTime(j.path)
 }
 

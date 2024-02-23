@@ -65,6 +65,50 @@ var intdirs = map[string][]string{
 	"доки": {"док1.txt", "док2.txt"},
 }
 
+func checkReadDir(j jnt.Joint) (err error) {
+	if j.Busy() {
+		return fmt.Errorf("joint is busy before opening")
+	}
+
+	var f fs.File
+	if f, err = j.Open("testdata"); err != nil {
+		return
+	}
+	defer f.Close()
+
+	if !j.Busy() {
+		return fmt.Errorf("joint is not busy after opening")
+	}
+
+	var list []fs.DirEntry
+	if list, err = j.ReadDir(-1); err != nil {
+		return
+	}
+
+	if len(list) != 1 {
+		return fmt.Errorf("expected 1 file in 'testdata' directory, found %d files", len(list))
+	}
+
+	var fi = list[0].(jnt.JointFileInfo)
+	if fi.Name() != "external.iso" {
+		return fmt.Errorf("expected 'external.iso' file in 'testdata' directory")
+	}
+
+	if fi.IsRealDir() {
+		return fmt.Errorf("file 'external.iso' should be recognized as real file")
+	}
+
+	if !fi.IsDir() {
+		return fmt.Errorf("file 'external.iso' should be recognized as virtual folder")
+	}
+
+	if fi.Mode().Type() != fs.ModeDir {
+		return fmt.Errorf("file 'external.iso' have wrong file type")
+	}
+
+	return
+}
+
 func checkFile(j jnt.Joint, fpath string) (err error) {
 	if j.Busy() {
 		return fmt.Errorf("joint '%s' is busy before opening", fpath)
@@ -198,18 +242,22 @@ func readChunk(j, base jnt.Joint) (err error) {
 	return
 }
 
-// Read files chunks on IsoJoint.
-func TestIsoReadChunk(t *testing.T) {
+func TestSysJoint(t *testing.T) {
 	var err error
 
-	var j jnt.Joint = &jnt.IsoJoint{}
-	if err = readChunk(j, nil); err != nil {
+	var j = &jnt.SysJoint{}
+	if err = j.Make(nil, "."); err != nil {
+		t.Fatal(err)
+	}
+	defer j.Cleanup()
+
+	if err = checkReadDir(j); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Check file reading in external ISO-disk.
-func TestExtReadFile(t *testing.T) {
+// Check file reading in external ISO-disk placed at primary filesystem.
+func TestIsoExtReadFile(t *testing.T) {
 	var err error
 
 	var j jnt.Joint = &jnt.IsoJoint{}
@@ -225,8 +273,8 @@ func TestExtReadFile(t *testing.T) {
 	}
 }
 
-// Check file reading in internal ISO-disk.
-func TestIntReadFile(t *testing.T) {
+// Check file reading in internal ISO-disk placed at primary filesystem.
+func TestIsoIntReadFile(t *testing.T) {
 	var err error
 
 	var j1 jnt.Joint = &jnt.IsoJoint{}
@@ -247,8 +295,8 @@ func TestIntReadFile(t *testing.T) {
 	}
 }
 
-// Check directory list in external ISO-disk.
-func TestExtDirList(t *testing.T) {
+// Check directory list in external ISO-disk placed at primary filesystem.
+func TestIsoExtDirList(t *testing.T) {
 	var err error
 
 	var j jnt.Joint = &jnt.IsoJoint{}
@@ -264,8 +312,8 @@ func TestExtDirList(t *testing.T) {
 	}
 }
 
-// Check directory list in internal ISO-disk.
-func TestIntDirList(t *testing.T) {
+// Check directory list in internal ISO-disk placed at primary filesystem.
+func TestIsoIntDirList(t *testing.T) {
 	var err error
 
 	var j1 jnt.Joint = &jnt.IsoJoint{}
@@ -283,5 +331,15 @@ func TestIntDirList(t *testing.T) {
 		if err = checkDir(j2, fpath, intdirs); err != nil {
 			t.Fatal(err)
 		}
+	}
+}
+
+// Read files chunks on IsoJoint.
+func TestIsoReadChunk(t *testing.T) {
+	var err error
+
+	var j jnt.Joint = &jnt.IsoJoint{}
+	if err = readChunk(j, nil); err != nil {
+		t.Fatal(err)
 	}
 }

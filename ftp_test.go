@@ -7,7 +7,6 @@ package joint_test
 // Then copy 'testdata' folder with ISO-file to the FTP root folder.
 
 import (
-	"io/fs"
 	"os"
 	"testing"
 
@@ -31,44 +30,127 @@ func TestFtpJoint(t *testing.T) {
 	}
 	defer j.Cleanup()
 
-	if j.Busy() {
-		t.Fatal("joint is busy before opening")
-	}
-
-	var f fs.File
-	if f, err = j.Open("testdata"); err != nil {
+	if err = checkReadDir(j); err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
+}
 
-	if !j.Busy() {
-		t.Fatal("joint is not busy after opening")
+// Check file reading in external ISO-disk placed at FTP.
+func TestFtpExtReadFile(t *testing.T) {
+	var err error
+
+	var ftpaddr string
+	if ftpaddr = os.Getenv(ftpenv); ftpaddr == "" {
+		return // skip test if JOINT_FTP is not set
 	}
 
-	var list []fs.DirEntry
-	if list, err = j.ReadDir(-1); err != nil {
+	var j1 jnt.Joint = &jnt.FtpJoint{}
+	if err = j1.Make(nil, ftpaddr); err != nil {
+		t.Fatal(err)
+	}
+	defer j1.Cleanup() // Cleanup can be called twice
+
+	var j2 jnt.Joint = &jnt.IsoJoint{}
+	if err = j2.Make(j1, "testdata/external.iso"); err != nil {
+		t.Fatal(err)
+	}
+	defer j2.Cleanup()
+
+	for _, fpath := range extfiles {
+		if err = checkFile(j2, fpath); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Check file reading in internal ISO-disk placed at FTP.
+func TestFtpIntReadFile(t *testing.T) {
+	var err error
+
+	var ftpaddr string
+	if ftpaddr = os.Getenv(ftpenv); ftpaddr == "" {
+		return // skip test if JOINT_FTP is not set
+	}
+
+	var j1 jnt.Joint = &jnt.FtpJoint{}
+	if err = j1.Make(nil, ftpaddr); err != nil {
 		t.Fatal(err)
 	}
 
-	if len(list) != 1 {
-		t.Fatalf("expected 1 file in 'testdata' directory, found %d files", len(list))
+	var j2 jnt.Joint = &jnt.IsoJoint{}
+	if err = j2.Make(j1, "testdata/external.iso"); err != nil {
+		t.Fatal(err)
 	}
 
-	var fi = list[0].(jnt.FtpFileInfo)
-	if fi.Name() != "external.iso" {
-		t.Fatal("expected 'external.iso' file in 'testdata' directory")
+	var j3 jnt.Joint = &jnt.IsoJoint{}
+	if err = j3.Make(j2, "disk/internal.iso"); err != nil {
+		t.Fatal(err)
+	}
+	defer j3.Cleanup() // only top-level joint must be called for Cleanup
+
+	for _, fpath := range intfiles {
+		if err = checkFile(j3, fpath); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Check directory list in external ISO-disk placed at FTP.
+func TestFtpExtDirList(t *testing.T) {
+	var err error
+
+	var ftpaddr string
+	if ftpaddr = os.Getenv(ftpenv); ftpaddr == "" {
+		return // skip test if JOINT_FTP is not set
 	}
 
-	if fi.IsRealDir() {
-		t.Fatal("file 'external.iso' should be recognized as real file")
+	var j1 jnt.Joint = &jnt.FtpJoint{}
+	if err = j1.Make(nil, ftpaddr); err != nil {
+		t.Fatal(err)
 	}
 
-	if !fi.IsDir() {
-		t.Fatal("file 'external.iso' should be recognized as virtual folder")
+	var j2 jnt.Joint = &jnt.IsoJoint{}
+	if err = j2.Make(j1, "testdata/external.iso"); err != nil {
+		t.Fatal(err)
+	}
+	defer j2.Cleanup()
+
+	for fpath := range extdirs {
+		if err = checkDir(j2, fpath, extdirs); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Check directory list in internal ISO-disk placed at FTP.
+func TestFtpIntDirList(t *testing.T) {
+	var err error
+
+	var ftpaddr string
+	if ftpaddr = os.Getenv(ftpenv); ftpaddr == "" {
+		return // skip test if JOINT_FTP is not set
 	}
 
-	if fi.Mode() != 0444|fs.ModeDir || fi.Type() != fs.ModeDir {
-		t.Fatal("file 'external.iso' have wrong file mode")
+	var j1 jnt.Joint = &jnt.FtpJoint{}
+	if err = j1.Make(nil, ftpaddr); err != nil {
+		t.Fatal(err)
+	}
+
+	var j2 jnt.Joint = &jnt.IsoJoint{}
+	if err = j2.Make(j1, "testdata/external.iso"); err != nil {
+		t.Fatal(err)
+	}
+
+	var j3 jnt.Joint = &jnt.IsoJoint{}
+	if err = j3.Make(j2, "disk/internal.iso"); err != nil {
+		t.Fatal(err)
+	}
+	defer j3.Cleanup() // only top-level joint must be called for Cleanup
+
+	for fpath := range intdirs {
+		if err = checkDir(j3, fpath, intdirs); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -81,13 +163,13 @@ func TestFtpReadChunk(t *testing.T) {
 		return // skip test if JOINT_FTP is not set
 	}
 
-	var j1 = &jnt.FtpJoint{}
+	var j1 jnt.Joint = &jnt.FtpJoint{}
 	if err = j1.Make(nil, ftpaddr); err != nil {
 		t.Fatal(err)
 	}
 	defer j1.Cleanup()
 
-	var j2 = &jnt.IsoJoint{}
+	var j2 jnt.Joint = &jnt.IsoJoint{}
 	if err = readChunk(j2, j1); err != nil {
 		t.Fatal(err)
 	}

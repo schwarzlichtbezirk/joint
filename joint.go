@@ -104,6 +104,12 @@ func MakeJoint(fullpath string) (j Joint, err error) {
 	return
 }
 
+// JointFileInfo have additional IsRealDir, which points real file representation.
+type JointFileInfo interface {
+	fs.FileInfo
+	IsRealDir() bool
+}
+
 // fileinfo is wrapper around inherited fs.FileInfo to provide derived IsDir.
 type fileinfo struct {
 	fs.FileInfo
