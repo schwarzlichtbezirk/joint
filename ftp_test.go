@@ -2,11 +2,12 @@ package joint_test
 
 // ATTENTION!
 // To pass this test in its entirety should be set environment variable
-// JOINT_FTP to address of test FTP-service with read access. For example,
+// JOINT_FTP to address of test FTP-service with credentials. For example,
 // `set JOINT_FTP=ftp://user:password@192.168.1.1:21`
-// Then copy 'testdata' folder with ISO-file to the FTP root folder.
+// Then copy 'testdata' folder with ISO-file to the FTP root folder as is.
 
 import (
+	"io/fs"
 	"os"
 	"testing"
 
@@ -21,6 +22,7 @@ func TestFtpJoint(t *testing.T) {
 
 	var ftpaddr string
 	if ftpaddr = os.Getenv(ftpenv); ftpaddr == "" {
+		t.Log("environment variable JOINT_FTP does not set, test on FTP joints skipped")
 		return // skip test if JOINT_FTP is not set
 	}
 
@@ -29,6 +31,23 @@ func TestFtpJoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer j.Cleanup()
+
+	if err = j.ChangeDir("testdata"); err != nil {
+		t.Fatal(err)
+	}
+
+	var fi fs.FileInfo
+	if fi, err = j.Info("external.iso"); err != nil {
+		t.Fatal(err)
+	}
+
+	if fi.Size() != isosize {
+		t.Fatal("ISO-file size does not match")
+	}
+
+	if err = j.ChangeDirToParent(); err != nil {
+		t.Fatal(err)
+	}
 
 	if err = checkReadDir(j); err != nil {
 		t.Fatal(err)

@@ -218,5 +218,17 @@ func main() {
 }
 ```
 
+## Tests remarks
+
+Unit tests for services runs on real FTP, SFTP and WebDAV services, not on any emulations. Before run `go test` command it should be set 3 environment variables:
+
+1) `JOINT_FTP` with address of FTP-service and credentials. As in pattern `set JOINT_FTP=ftp://user:password@192.168.1.1:21`
+2) `JOINT_SFTP` with address of SFTP-service and credentials. As in pattern `set JOINT_SFTP=sftp://user:password@192.168.1.1:22`
+3) `JOINT_DAV` with URL of WebDAV-service and credentials. As in pattern `set JOINT_DAV=https://user:password@example.keenetic.link/webdav/`
+
+If some environment variables not set or empty, those tests will be skipped.
+
+Then copy `testdata` folder with ISO-file to the services root folder as is.
+
 ---
 (c) schwarzlichtbezirk, 2023-2024.

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"io/fs"
+	"path"
 	"sort"
 	"strings"
 	"sync"
@@ -115,16 +116,32 @@ type fileinfo struct {
 	fs.FileInfo
 }
 
+// Hack for gowebdav.File on case if it fill `path` field and
+// does not fill `name` field.
+func (fi fileinfo) Name() (name string) {
+	type pather interface {
+		Path() string
+	}
+	if name = fi.FileInfo.Name(); name == "" {
+		if pi, ok := fi.FileInfo.(pather); ok {
+			if p := pi.Path(); p != "" {
+				name = path.Base(p)
+			}
+		}
+	}
+	return
+}
+
 func (fi fileinfo) Mode() fs.FileMode {
 	var mode = fi.FileInfo.Mode()
-	if mode.IsRegular() && IsTypeIso(fi.FileInfo.Name()) {
+	if mode.IsRegular() && IsTypeIso(fi.Name()) {
 		mode |= fs.ModeDir
 	}
 	return mode
 }
 
 func (fi fileinfo) IsDir() bool {
-	return fi.FileInfo.IsDir() || IsTypeIso(fi.FileInfo.Name())
+	return fi.FileInfo.IsDir() || IsTypeIso(fi.Name())
 }
 
 func (fi fileinfo) IsRealDir() bool {

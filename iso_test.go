@@ -11,6 +11,9 @@ import (
 	jnt "github.com/schwarzlichtbezirk/joint"
 )
 
+const isosize = 0x128000 // size of external ISO image
+const foxsize = 44       // size of "fox.txt" file
+
 // Precalculated CRC32 codes with IEEE polynomial of files in ISO-images.
 var filecrc = map[string]uint32{
 	"fox.txt":      0x519025e9,
@@ -197,8 +200,6 @@ func checkDir(j jnt.Joint, fpath string, dirs map[string][]string) (err error) {
 	return nil
 }
 
-const foxsize = 44 // size of "fox.txt" file
-
 // Open file "fox.txt" with content "The quick brown fox
 // jumps over the lazy dog." and read chunks from it.
 func readChunk(j, base jnt.Joint) (err error) {
@@ -250,6 +251,15 @@ func TestSysJoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer j.Cleanup()
+
+	var fi fs.FileInfo
+	if fi, err = j.Info("testdata/external.iso"); err != nil {
+		t.Fatal(err)
+	}
+
+	if fi.Size() != isosize {
+		t.Fatal("ISO-file size does not match")
+	}
 
 	if err = checkReadDir(j); err != nil {
 		t.Fatal(err)
